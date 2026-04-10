@@ -29,7 +29,7 @@ A powerful terminal-based image batch compression and conversion tool built with
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/tui-img.git
+git clone https://github.com/howdyitskyle/tui-img.git
 cd tui-img
 
 # Build release version
