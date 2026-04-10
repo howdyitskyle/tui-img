@@ -1,7 +1,8 @@
 [package]
 name = "tui-img"
 version = "0.1.0"
-edition = "2021"
+authors = ["Kyle Greenan <kyle@howdyitskyle.com>"]
+edition = "2026"
 description = "A powerful terminal-based image batch compression and conversion tool"
 license = "MIT"
 repository = "https://github.com/howdyitskyle/tui-img"
