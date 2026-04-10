@@ -29,8 +29,8 @@ A powerful terminal-based image batch compression and conversion tool built with
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/tui_image_tool.git
-cd tui_image_tool
+git clone https://github.com/yourusername/tui-img.git
+cd tui-img
 
 # Build release version
 cargo build --release
