@@ -2,87 +2,45 @@
 
 ## Build & Run
 ```bash
-cargo build     # Build the project
-cargo run       # Run the image compressor
-cargo check     # Type-check without full build
-cargo test      # Run tests
-cargo clippy    # Run linter
+cargo build     # Build
+cargo run       # Run
+cargo check     # Type-check
+cargo test      # Run 66 tests
+cargo clippy    # Lint
 ```
 
-## Project Structure
-- Package name: `tui-img`
-- Entry point: TUI file explorer for batch image compression
+## Architecture
+```
+src/
+├── main.rs        # Entry point, App struct, event loop
+├── models.rs      # Data structures
+├── cache.rs       # Metadata/EXIF caching
+├── compression.rs # Image encoding
+└── ui.rs          # TUI rendering
+```
 
-## Dependencies
-- `ratatui` (0.26) - TUI framework
-- `image` - Image decoding/encoding
-- `oxipng` - PNG optimization
-- `webp` - WebP encoding
-- `kamadak-exif` - EXIF metadata
-- `walkdir` - Directory traversal
-- `crossterm` - Terminal input
-- `anyhow` - Error handling
-- `rayon` - Parallel processing
-- `memmap2` - Memory-mapped file reading
+## Key Dependencies
+- `ratatui 0.26` - TUI framework
+- `image 0.25` - Image encoding with jpeg/png/webp/gif/tiff/bmp/tga features
+- `oxipng 4` - PNG optimization
+- `webp 0.3` - WebP encoding
+- `kamadak-exif 0.5` - EXIF metadata
+- `rayon 1.10` - Parallel processing
 
-## Keyboard Shortcuts
-| Key | Action |
-|-----|--------|
-| `↑/↓` or `j/k` | Navigate file list / settings options |
-| `Enter` | Open directory / enter folder |
-| `Backspace` | Go up one directory |
-| `Space` | Toggle file in/out of queue |
-| `Tab` | Switch between Files, Image Settings, and Output columns |
-| `←/→` | Change setting value |
-| `c` | Compress queued files |
-| `C` | Clear queue |
-| `q` | Quit |
-| `PgUp/PgDown` | Page up/down in file list |
-| `Home/End` | Jump to first/last file |
+## Quirks
+- Release build uses `panic = "abort"` (no unwinding)
+- Images re-encode without EXIF when stripped (all metadata removed)
+- Max resize uses Lanczos3 resampling
+- Output dir auto-created; `~` expands to home directory
+- Auto-unique filenames: `file.ext`, `file_2.ext`, `file_3.ext`, ...
+- File list auto-refreshes after compression when output dir = Same as source
+- Image Settings panel visible when focused (not just when file selected)
+- Image Settings navigation skips irrelevant options based on format:
+  - JPEG: Format → Quality → Color → EXIF → MaxWidth...
+  - WebP: Format → WebP (Lossy/Lossless) → Quality (only if Lossy) → Color...
+  - PNG: Format → Quality → Color → EXIF → Progressive → PNG Comp → MaxWidth...
+  - Other (GIF/TIFF/BMP/TGA/Same): Format → Quality (if source jpg/webp) → Color → EXIF → MaxWidth...
 
-## Global Settings (Image Settings column, Tab to access)
-| Setting | Description | Values |
-|---------|-------------|--------|
-| Format | Output file format (global) | Same, JPEG, PNG, WebP, GIF, TIFF, BMP, TGA |
-| WebP | Encoding mode (global) | Lossy, Lossless |
-| Output Dir | Custom output directory (global) | Path (supports ~) |
-
-## Per-File Settings
-| Setting | Description | Values |
-|---------|-------------|--------|
-| Quality | Compression quality | 0-100 |
-| Color | Color space conversion | RGB, Grayscale, RGBA |
-| EXIF | Metadata handling | Remove, Keep |
-| Progressive | PNG interlacing | Yes, No |
-| PNG Comp | Compression level | 0-9 |
-| Max Width | Resize max width | None or pixels |
-| Max Height | Resize max height | None or pixels |
-| Lock Aspect Ratio | Keep aspect ratio when resizing | Yes, No |
-| Overwrite | File behavior | Overwrite, New file |
-| Backup | Create backup first | Yes, No (planned) |
-
-## UI Layout
-- **Header**: Title bar with cyan accent
-- **Main**: File list (left ~60%), Image Settings + Output panels (right)
-- **Status bar**: Keyboard shortcuts
-
-## Features
-- File browser with directory navigation (↑/↓, Enter, Backspace)
-- Tab-based column switching (Files/ImageSettings/Output)
-- Global settings (Format, WebP mode, Output Dir) and per-file settings
-- Batch compression: JPEG, PNG, WebP, GIF, TIFF, BMP, TGA
-- Format conversion between all supported formats
-- Resize images with max width/height
-- PNG interlacing (progressive display)
-- WebP lossless encoding option
-- Output directory with auto-creation
-- Lock aspect ratio for resizing
-- Auto-save unique filenames for duplicates
-
-## Notes
-- 66 unit tests (`cargo test`)
-- No CI/CD configured
-- Images are re-encoded without EXIF when enabled (strips all metadata)
-- Max width/height uses Lanczos3 resampling
-- Output directory is created automatically if it doesn't exist
-- Supports `~` in Output Dir path (expands to home directory)
+## Testing
+- No integration tests; all 66 unit tests run via `cargo test`
+- No CI configured
