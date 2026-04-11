@@ -14,6 +14,7 @@ use models::{
     bytes_to_human, truncate_str, CachedImageInfo, ColorSpace, ExifData, ImageFile, ImageSettings,
     OutputFormat,
 };
+use ratatui::prelude::Span;
 use ratatui::Terminal;
 use rayon::prelude::*;
 use std::collections::HashMap;
@@ -34,6 +35,32 @@ pub fn path_to_tilde(path: &Path) -> String {
         }
     }
     path.to_string_lossy().to_string()
+}
+
+fn show_webp_setting(format: Option<OutputFormat>) -> bool {
+    format == Some(OutputFormat::Webp)
+}
+
+fn show_quality_setting(format: Option<OutputFormat>, file: Option<&ImageFile>) -> bool {
+    match format {
+        None | Some(OutputFormat::Jpeg) => true,
+        Some(OutputFormat::Webp) => file.map(|f| !f.settings.webp_lossless).unwrap_or(true),
+        Some(OutputFormat::Same) => {
+            if let Some(f) = file {
+                matches!(
+                    f.extension().as_deref(),
+                    Some("jpg") | Some("jpeg") | Some("webp")
+                )
+            } else {
+                true
+            }
+        }
+        _ => false,
+    }
+}
+
+fn show_progressive_setting(format: Option<OutputFormat>) -> bool {
+    format == Some(OutputFormat::Png)
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -88,6 +115,7 @@ pub struct App {
     pub visible_rows: usize,
     pub compression_results: Vec<CompressionResult>,
     pub results_scroll: usize,
+    pub status_spans_cache: Option<Vec<Span<'static>>>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -136,6 +164,7 @@ impl App {
             visible_rows: 20,
             compression_results: Vec::new(),
             results_scroll: 0,
+            status_spans_cache: None,
         }
     }
 
@@ -274,6 +303,8 @@ impl App {
             self.files[idx].queued = !self.files[idx].queued;
             if self.files[idx].queued {
                 self.queue.push(idx);
+                self.compression_results.clear();
+                self.results_scroll = 0;
             } else {
                 self.queue.retain(|&i| i != idx);
             }
@@ -315,6 +346,8 @@ impl App {
             self.files[*idx].queued = false;
         }
         self.queue.clear();
+        self.compression_results.clear();
+        self.results_scroll = 0;
     }
 
     pub fn queue_size(&self) -> u64 {
@@ -404,6 +437,7 @@ impl App {
         }
 
         self.compressing = true;
+        self.status_spans_cache = None;
         let total = self.queue.len();
         self.progress = Some((0, total, 0, "Starting...".to_string()));
 
@@ -552,10 +586,26 @@ impl App {
                     self.compressing = false;
                     self.progress = None;
                     self.focused_column = FocusedColumn::Files;
+                    self.status_spans_cache = None;
+
+                    let output_dir = self.global_output_directory.clone();
+                    let reload_needed = output_dir.is_none();
 
                     for result in &results {
                         self.files[result.file_index].size = result.new_size;
                         self.files[result.file_index].queued = false;
+                    }
+
+                    if reload_needed {
+                        let current_dir = self.current_dir.clone();
+                        self.load_directory();
+                        self.current_dir = current_dir;
+                    } else if let Some(ref dir) = output_dir {
+                        if dir == &self.current_dir {
+                            let current_dir = self.current_dir.clone();
+                            self.load_directory();
+                            self.current_dir = current_dir;
+                        }
                     }
 
                     self.update_queue_positions();
@@ -583,6 +633,7 @@ impl App {
                     self.compression_cancelled = false;
                     self.progress = None;
                     self.focused_column = FocusedColumn::Files;
+                    self.status_spans_cache = None;
                     self.error_message = Some("Compression cancelled".to_string());
                 }
             }
@@ -762,48 +813,48 @@ fn handle_input(
                         }
                     }
                 }
+            } else if app.focused_column == FocusedColumn::Output {
+                if app.results_scroll > 0 {
+                    app.results_scroll -= 1;
+                }
             } else {
-                let format = app.global_output_format.unwrap_or(OutputFormat::Same);
-                let show_quality = match app.global_output_format {
-                    None | Some(OutputFormat::Jpeg) => true,
-                    Some(OutputFormat::Webp) => app
-                        .selected_file()
-                        .map(|f| !f.settings.webp_lossless)
-                        .unwrap_or(false),
-                    Some(OutputFormat::Same) => app
-                        .selected_file()
-                        .map(|f| {
-                            matches!(
-                                f.extension().as_deref(),
-                                Some("jpg") | Some("jpeg") | Some("webp")
-                            )
-                        })
-                        .unwrap_or(true),
-                    _ => false,
-                };
+                let format = app.global_output_format;
+                let file = app.selected_file();
+                let from_quality = show_quality_setting(format, file);
+                let from_webp = show_webp_setting(format);
+                let from_progressive = show_progressive_setting(format);
 
                 app.setting_option = match app.setting_option {
-                    SettingOption::Format => SettingOption::OutputDir,
-                    SettingOption::WebpLossless => SettingOption::Format,
                     SettingOption::Quality => {
-                        if format == OutputFormat::Webp {
+                        if from_webp {
                             SettingOption::WebpLossless
                         } else {
                             SettingOption::Format
                         }
                     }
-                    SettingOption::Color => {
-                        if format == OutputFormat::Webp && show_quality {
+                    SettingOption::Color => SettingOption::Quality,
+                    SettingOption::Exif => SettingOption::Color,
+                    SettingOption::Format => {
+                        if from_webp {
                             SettingOption::WebpLossless
-                        } else if show_quality {
+                        } else if from_progressive {
+                            SettingOption::Progressive
+                        } else if from_quality {
                             SettingOption::Quality
                         } else {
-                            SettingOption::Format
+                            SettingOption::Color
                         }
                     }
-                    SettingOption::Exif => SettingOption::Color,
-                    SettingOption::Progressive | SettingOption::PngCompress => SettingOption::Exif,
-                    SettingOption::MaxWidth => SettingOption::Exif,
+                    SettingOption::WebpLossless => SettingOption::Format,
+                    SettingOption::Progressive => SettingOption::MaxWidth,
+                    SettingOption::PngCompress => SettingOption::Progressive,
+                    SettingOption::MaxWidth => {
+                        if from_progressive {
+                            SettingOption::PngCompress
+                        } else {
+                            SettingOption::Exif
+                        }
+                    }
                     SettingOption::MaxHeight => SettingOption::MaxWidth,
                     SettingOption::LockAspectRatio => SettingOption::MaxHeight,
                     SettingOption::Overwrite => SettingOption::LockAspectRatio,
@@ -827,60 +878,44 @@ fn handle_input(
                         }
                     }
                 }
+            } else if app.focused_column == FocusedColumn::Output {
+                let max_scroll = app.compression_results.len().saturating_sub(1);
+                if app.results_scroll < max_scroll {
+                    app.results_scroll += 1;
+                }
             } else {
-                let format = app.global_output_format.unwrap_or(OutputFormat::Same);
-                let show_quality = match app.global_output_format {
-                    None | Some(OutputFormat::Jpeg) => true,
-                    Some(OutputFormat::Webp) => app
-                        .selected_file()
-                        .map(|f| !f.settings.webp_lossless)
-                        .unwrap_or(false),
-                    Some(OutputFormat::Same) => app
-                        .selected_file()
-                        .map(|f| {
-                            matches!(
-                                f.extension().as_deref(),
-                                Some("jpg") | Some("jpeg") | Some("webp")
-                            )
-                        })
-                        .unwrap_or(true),
-                    _ => false,
-                };
+                let format = app.global_output_format;
+                let file = app.selected_file();
+                let from_quality = show_quality_setting(format, file);
+                let from_webp = show_webp_setting(format);
+                let from_progressive = show_progressive_setting(format);
 
                 app.setting_option = match app.setting_option {
                     SettingOption::Format => {
-                        if format == OutputFormat::Webp {
+                        if from_webp {
                             SettingOption::WebpLossless
-                        } else if show_quality {
+                        } else if from_quality {
                             SettingOption::Quality
                         } else {
                             SettingOption::Color
                         }
                     }
                     SettingOption::WebpLossless => {
-                        if show_quality
-                            && !app
-                                .selected_file()
-                                .map(|f| f.settings.webp_lossless)
-                                .unwrap_or(false)
-                        {
+                        if from_quality {
                             SettingOption::Quality
                         } else {
                             SettingOption::Color
                         }
                     }
                     SettingOption::Quality => SettingOption::Color,
-                    SettingOption::Color => {
-                        if app.global_output_format == Some(OutputFormat::Webp) && show_quality {
-                            SettingOption::WebpLossless
+                    SettingOption::Color => SettingOption::Exif,
+                    SettingOption::Exif => {
+                        if from_progressive {
+                            SettingOption::Progressive
                         } else {
-                            SettingOption::Exif
+                            SettingOption::MaxWidth
                         }
                     }
-                    SettingOption::Exif => match format {
-                        OutputFormat::Png => SettingOption::Progressive,
-                        _ => SettingOption::MaxWidth,
-                    },
                     SettingOption::Progressive => SettingOption::PngCompress,
                     SettingOption::PngCompress => SettingOption::MaxWidth,
                     SettingOption::MaxWidth => SettingOption::MaxHeight,
@@ -1155,8 +1190,8 @@ fn handle_input(
         }
         KeyCode::Char('c') => {
             if !app.queue.is_empty() && !app.compressing {
-                if let Some(tx) = compression_tx.lock().unwrap().take() {
-                    app.compress_queue(tx);
+                if let Some(tx) = compression_tx.lock().unwrap().as_ref() {
+                    app.compress_queue(tx.clone());
                 }
             }
         }
@@ -1164,7 +1199,11 @@ fn handle_input(
             app.clear_queue();
         }
         KeyCode::Char('q') | KeyCode::Esc => {
-            return true;
+            if app.compressing {
+                app.cancel_compression();
+            } else {
+                return true;
+            }
         }
         _ => {}
     }

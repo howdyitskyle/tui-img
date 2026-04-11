@@ -1,4 +1,6 @@
-# TUI Image Tool
+# tui-img
+
+<img width="3792" height="2060" alt="screenshot-2026-04-10_20-08-29" src="https://github.com/user-attachments/assets/467aab34-ef2c-423f-b66e-07389d13aa80" />
 
 A powerful terminal-based image batch compression and conversion tool built with Rust.
 
@@ -16,6 +18,7 @@ A powerful terminal-based image batch compression and conversion tool built with
 - **Parallel Processing** - Uses rayon for parallel EXIF loading and directory scanning
 - **Auto Unique Filenames** - Creates `file_2.ext` when filenames would conflict
 - **Auto Directory Creation** - Output directories are created automatically if they don't exist
+- **Smart Settings Navigation** - Arrow keys in Image Settings panel automatically skip irrelevant options based on output format
 
 ## Supported Formats
 
@@ -104,6 +107,7 @@ The application includes several performance optimizations:
 - **Metadata Caching** - Cached dimensions and color type for instant re-navigation
 - **Virtual Scrolling** - Only renders visible rows, handles 10,000+ files smoothly
 - **Parallel EXIF Loading** - Preloads EXIF data in background while browsing
+- **Auto File Refresh** - File list refreshes automatically after compression when output is "Same as source"
 
 ## Architecture
 
