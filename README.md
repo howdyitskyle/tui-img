@@ -1,5 +1,7 @@
 # tui-img
 
+<img width="3792" height="2060" alt="screenshot-2026-04-10_20-08-29" src="https://github.com/user-attachments/assets/467aab34-ef2c-423f-b66e-07389d13aa80" />
+
 A powerful terminal-based image batch compression and conversion tool built with Rust.
 
 ![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)
