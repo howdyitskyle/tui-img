@@ -26,7 +26,9 @@ pub fn ui(app: &mut crate::App, f: &mut Frame) {
 
 pub fn render_main_content(f: &mut Frame, area: Rect, app: &mut crate::App) {
     let has_selected = app.selected_file().is_some();
-    let wide_enough = area.width >= 100 && has_selected;
+    let settings_focused = app.focused_column == crate::FocusedColumn::ImageSettings;
+    let output_focused = app.focused_column == crate::FocusedColumn::Output;
+    let wide_enough = area.width >= 100 && (has_selected || settings_focused || output_focused);
 
     if wide_enough {
         let file_width = (area.width * 50) / 100;
@@ -111,20 +113,20 @@ pub fn render_file_list(f: &mut Frame, area: Rect, app: &mut crate::App) {
     let ext_width = min_ext_width;
 
     let header = Line::from(vec![
-        Span::from("  "),
+        Span::from("   "),
         Span::from(format!("{:<width$}", "NAME", width = name_width)),
         Span::from("  "),
         Span::from(format!("{:>width$}", "DIM", width = dims_width)),
         Span::from("  "),
-        Span::from(format!("{:>width$}", "MP", width = mp_width)),
+        Span::from(format!("{:^width$}", "MP", width = mp_width)),
         Span::from("  "),
         Span::from(format!("{:>width$}", "SIZE", width = size_width)),
         Span::from("  "),
-        Span::from(format!("{:>width$}", "COLOR", width = color_width)),
+        Span::from(format!("{:^width$}", "COLOR", width = color_width)),
         Span::from("  "),
         Span::from(format!("{:<width$}", "EXIF", width = exif_width)),
         Span::from("  "),
-        Span::from(format!("{:>width$}", "TYPE", width = ext_width)),
+        Span::from(format!("{:^width$}", "TYPE", width = ext_width)),
     ])
     .style(Style::new().dark_gray().bold());
 
@@ -459,7 +461,7 @@ pub fn render_settings_panel(f: &mut Frame, area: Rect, app: &crate::App) {
         Some(OutputFormat::Webp) => app
             .selected_file()
             .map(|f| !f.settings.webp_lossless)
-            .unwrap_or(false),
+            .unwrap_or(true),
         Some(OutputFormat::Same) => {
             if let Some(file) = app.selected_file() {
                 matches!(
@@ -689,14 +691,25 @@ pub fn render_output_panel(f: &mut Frame, area: Rect, app: &crate::App) {
         output_lines.push(Line::from(vec![Span::raw("")]));
         output_lines.push(Line::from(vec![Span::from("Results:").dark_gray()]));
 
-        for result in app.compression_results.iter().rev().take(5) {
+        let max_visible = 5;
+        let total_results = app.compression_results.len();
+        let max_scroll = total_results.saturating_sub(max_visible);
+        let scroll = app.results_scroll.min(max_scroll);
+
+        for result in app
+            .compression_results
+            .iter()
+            .rev()
+            .skip(scroll)
+            .take(max_visible)
+        {
             let file = &app.files[result.file_index];
             if let Some(ref error) = result.error {
                 output_lines.push(Line::from(vec![
                     Span::from(format!("  {} ", "✗")).red(),
-                    Span::from(&file.name).white(),
+                    Span::from(&file.name).red(),
                     Span::raw(" ").dark_gray(),
-                    Span::raw(truncate_str(error, 30)).dark_gray(),
+                    Span::raw(truncate_str(error, 30)).red(),
                 ]));
             } else {
                 let savings = if result.original_size > result.new_size {
@@ -713,7 +726,18 @@ pub fn render_output_panel(f: &mut Frame, area: Rect, app: &crate::App) {
                 output_lines.push(Line::from(vec![
                     Span::from(format!("  {} ", "✓")).cyan(),
                     Span::from(&file.name).white(),
-                    Span::raw(" ").dark_gray(),
+                ]));
+                if let Some(ref out_name) = result.output_filename {
+                    if out_name != &file.name {
+                        output_lines.push(Line::from(vec![
+                            Span::raw("    ").dark_gray(),
+                            Span::from("→ ").dark_gray(),
+                            Span::from(out_name).white(),
+                        ]));
+                    }
+                }
+                output_lines.push(Line::from(vec![
+                    Span::raw("    ").dark_gray(),
                     Span::from(format!(
                         "{} → {} ({})",
                         bytes_to_human(result.original_size),
@@ -770,14 +794,33 @@ pub fn create_quality_slider(quality: u8, width: usize) -> String {
     format!("[{}] {}%", bar, quality)
 }
 
-pub fn render_status_bar(f: &mut Frame, area: Rect, app: &crate::App) {
-    let spans = if app.compressing {
-        vec![
-            Span::from("[Esc]").cyan(),
-            Span::raw(" Cancel   "),
-            Span::from("[q]").cyan(),
-            Span::raw(" Quit"),
-        ]
+pub fn render_status_bar(f: &mut Frame, area: Rect, app: &mut crate::App) {
+    let cache_key = app.compressing;
+    let spans = if let Some(ref cached) = app.status_spans_cache {
+        if cache_key {
+            cached.clone()
+        } else {
+            app.status_spans_cache
+                .clone()
+                .unwrap_or_else(|| build_status_spans(false))
+        }
+    } else {
+        let new_spans = build_status_spans(cache_key);
+        app.status_spans_cache = Some(new_spans.clone());
+        new_spans
+    };
+
+    let paragraph = Paragraph::new(Line::from(spans))
+        .style(Style::new().dark_gray())
+        .centered()
+        .block(Block::default());
+
+    f.render_widget(paragraph, area);
+}
+
+fn build_status_spans(compressing: bool) -> Vec<Span<'static>> {
+    if compressing {
+        vec![Span::from("[Esc]").cyan(), Span::raw(" Cancel")]
     } else {
         vec![
             Span::from("[↑↓]").cyan(),
@@ -798,14 +841,7 @@ pub fn render_status_bar(f: &mut Frame, area: Rect, app: &crate::App) {
             Span::from("[q]").cyan(),
             Span::raw(" Quit"),
         ]
-    };
-
-    let paragraph = Paragraph::new(Line::from(spans))
-        .style(Style::new().dark_gray())
-        .centered()
-        .block(Block::default());
-
-    f.render_widget(paragraph, area);
+    }
 }
 
 pub fn render_popup(f: &mut Frame, area: Rect, title: &str, message: &str, color: Color) {
