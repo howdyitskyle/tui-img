@@ -689,14 +689,25 @@ pub fn render_output_panel(f: &mut Frame, area: Rect, app: &crate::App) {
         output_lines.push(Line::from(vec![Span::raw("")]));
         output_lines.push(Line::from(vec![Span::from("Results:").dark_gray()]));
 
-        for result in app.compression_results.iter().rev().take(5) {
+        let max_visible = 5;
+        let total_results = app.compression_results.len();
+        let max_scroll = total_results.saturating_sub(max_visible);
+        let scroll = app.results_scroll.min(max_scroll);
+
+        for result in app
+            .compression_results
+            .iter()
+            .rev()
+            .skip(scroll)
+            .take(max_visible)
+        {
             let file = &app.files[result.file_index];
             if let Some(ref error) = result.error {
                 output_lines.push(Line::from(vec![
                     Span::from(format!("  {} ", "✗")).red(),
-                    Span::from(&file.name).white(),
+                    Span::from(&file.name).red(),
                     Span::raw(" ").dark_gray(),
-                    Span::raw(truncate_str(error, 30)).dark_gray(),
+                    Span::raw(truncate_str(error, 30)).red(),
                 ]));
             } else {
                 let savings = if result.original_size > result.new_size {
@@ -713,7 +724,18 @@ pub fn render_output_panel(f: &mut Frame, area: Rect, app: &crate::App) {
                 output_lines.push(Line::from(vec![
                     Span::from(format!("  {} ", "✓")).cyan(),
                     Span::from(&file.name).white(),
-                    Span::raw(" ").dark_gray(),
+                ]));
+                if let Some(ref out_name) = result.output_filename {
+                    if out_name != &file.name {
+                        output_lines.push(Line::from(vec![
+                            Span::raw("    ").dark_gray(),
+                            Span::from("→ ").dark_gray(),
+                            Span::from(out_name).white(),
+                        ]));
+                    }
+                }
+                output_lines.push(Line::from(vec![
+                    Span::raw("    ").dark_gray(),
                     Span::from(format!(
                         "{} → {} ({})",
                         bytes_to_human(result.original_size),

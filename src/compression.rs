@@ -19,6 +19,7 @@ pub struct FileResult {
     pub file_index: usize,
     pub original_size: u64,
     pub new_size: u64,
+    pub output_filename: Option<String>,
     pub error: Option<String>,
 }
 
@@ -44,7 +45,7 @@ pub fn compress_image(
     file: &ImageFile,
     output_path: &Path,
     global_format: Option<OutputFormat>,
-) -> Result<u64> {
+) -> Result<(u64, String)> {
     let img = image::open(&file.path).context("Failed to open image")?;
     let processed = apply_processing(img, &file.settings);
 
@@ -91,7 +92,17 @@ pub fn compress_image(
         OutputFormat::Tiff => compress_tiff(&processed, &final_output_path, &file.settings),
         OutputFormat::Bmp => compress_bmp(&processed, &final_output_path, &file.settings),
         OutputFormat::Tga => compress_tga(&processed, &final_output_path, &file.settings),
-    }
+    }?;
+
+    let output_filename = final_output_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| file.name.clone());
+
+    Ok((
+        std::fs::metadata(&final_output_path)?.len(),
+        output_filename,
+    ))
 }
 
 fn apply_processing(img: image::DynamicImage, settings: &ImageSettings) -> image::DynamicImage {

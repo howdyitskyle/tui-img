@@ -87,6 +87,7 @@ pub struct App {
     pub scroll_offset: usize,
     pub visible_rows: usize,
     pub compression_results: Vec<CompressionResult>,
+    pub results_scroll: usize,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -94,6 +95,7 @@ pub struct CompressionResult {
     pub file_index: usize,
     pub original_size: u64,
     pub new_size: u64,
+    pub output_filename: Option<String>,
     pub error: Option<String>,
 }
 
@@ -133,6 +135,7 @@ impl App {
             scroll_offset: 0,
             visible_rows: 20,
             compression_results: Vec::new(),
+            results_scroll: 0,
         }
     }
 
@@ -464,7 +467,7 @@ impl App {
                 };
 
                 match compress_image(&temp_file, &output_path, global_format) {
-                    Ok(new_size) => {
+                    Ok((new_size, output_filename)) => {
                         let _ = tx.send(CompressionEvent::Stage(format!(
                             "Compressing to {}...",
                             truncate_str(&filename, 30)
@@ -483,6 +486,7 @@ impl App {
                             file_index: idx,
                             original_size,
                             new_size,
+                            output_filename: Some(output_filename),
                             error: None,
                         };
                         results.push(result.clone());
@@ -493,6 +497,7 @@ impl App {
                             file_index: idx,
                             original_size,
                             new_size: original_size,
+                            output_filename: None,
                             error: Some(e.to_string()),
                         };
                         results.push(result.clone());
@@ -535,6 +540,7 @@ impl App {
                         file_index: result.file_index,
                         original_size: result.original_size,
                         new_size: result.new_size,
+                        output_filename: result.output_filename.clone(),
                         error: result.error.clone(),
                     });
                 }
