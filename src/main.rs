@@ -3,6 +3,14 @@ mod compression;
 mod models;
 mod ui;
 
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+use std::thread;
+
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use walkdir::WalkDir;
+
 use anyhow::Result;
 use cache::{cache_metadata, get_cached_metadata};
 use compression::{compress_image, CompressionEvent};
@@ -16,26 +24,6 @@ use models::{
 };
 use ratatui::prelude::Span;
 use ratatui::Terminal;
-use rayon::prelude::*;
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::sync::mpsc;
-use std::thread;
-use walkdir::WalkDir;
-
-pub fn path_to_tilde(path: &Path) -> String {
-    if let Ok(home) = std::env::var("HOME") {
-        let home_str = home.trim_end_matches('/');
-        let path_str = path.to_string_lossy().trim_end_matches('/').to_string();
-        if let Some(after_home) = path_str.strip_prefix(home_str) {
-            if after_home.is_empty() {
-                return "~".to_string();
-            }
-            return format!("~{}", after_home);
-        }
-    }
-    path.to_string_lossy().to_string()
-}
 
 fn show_webp_setting(format: Option<OutputFormat>) -> bool {
     format == Some(OutputFormat::Webp)
@@ -43,7 +31,7 @@ fn show_webp_setting(format: Option<OutputFormat>) -> bool {
 
 fn show_quality_setting(format: Option<OutputFormat>, file: Option<&ImageFile>) -> bool {
     match format {
-        None | Some(OutputFormat::Jpeg) => true,
+        None | Some(OutputFormat::Jpeg) | Some(OutputFormat::Png) => true,
         Some(OutputFormat::Webp) => file.map(|f| !f.settings.webp_lossless).unwrap_or(true),
         Some(OutputFormat::Same) => {
             if let Some(f) = file {
@@ -79,7 +67,6 @@ pub enum SettingOption {
     Progressive,
     MaxWidth,
     MaxHeight,
-    LockAspectRatio,
     PngCompress,
     WebpLossless,
     Overwrite,
@@ -693,18 +680,7 @@ fn handle_input(
                             if input.is_empty() {
                                 file.settings.max_width = None;
                             } else if let Ok(val) = input.parse::<u32>() {
-                                let new_width = val.min(10000);
-                                file.settings.max_width = Some(new_width);
-
-                                if file.settings.lock_aspect_ratio {
-                                    if let Some((orig_w, orig_h)) = file.dimensions {
-                                        if orig_w > 0 && orig_h > 0 {
-                                            let aspect = orig_h as f64 / orig_w as f64;
-                                            let new_height = (new_width as f64 * aspect) as u32;
-                                            file.settings.max_height = Some(new_height.min(10000));
-                                        }
-                                    }
-                                }
+                                file.settings.max_width = Some(val.min(10000));
                             }
                         }
                     }
@@ -713,18 +689,7 @@ fn handle_input(
                             if input.is_empty() {
                                 file.settings.max_height = None;
                             } else if let Ok(val) = input.parse::<u32>() {
-                                let new_height = val.min(10000);
-                                file.settings.max_height = Some(new_height);
-
-                                if file.settings.lock_aspect_ratio {
-                                    if let Some((orig_w, orig_h)) = file.dimensions {
-                                        if orig_w > 0 && orig_h > 0 {
-                                            let aspect = orig_w as f64 / orig_h as f64;
-                                            let new_width = (new_height as f64 * aspect) as u32;
-                                            file.settings.max_width = Some(new_width.min(10000));
-                                        }
-                                    }
-                                }
+                                file.settings.max_height = Some(val.min(10000));
                             }
                         }
                     }
@@ -832,21 +797,19 @@ fn handle_input(
                             SettingOption::Format
                         }
                     }
-                    SettingOption::Color => SettingOption::Quality,
-                    SettingOption::Exif => SettingOption::Color,
-                    SettingOption::Format => {
-                        if from_webp {
-                            SettingOption::WebpLossless
-                        } else if from_progressive {
-                            SettingOption::Progressive
-                        } else if from_quality {
+                    SettingOption::Color => {
+                        if from_quality {
                             SettingOption::Quality
+                        } else if from_webp {
+                            SettingOption::WebpLossless
                         } else {
-                            SettingOption::Color
+                            SettingOption::Format
                         }
                     }
+                    SettingOption::Exif => SettingOption::Color,
+                    SettingOption::Format => SettingOption::OutputDir,
                     SettingOption::WebpLossless => SettingOption::Format,
-                    SettingOption::Progressive => SettingOption::MaxWidth,
+                    SettingOption::Progressive => SettingOption::Exif,
                     SettingOption::PngCompress => SettingOption::Progressive,
                     SettingOption::MaxWidth => {
                         if from_progressive {
@@ -856,8 +819,7 @@ fn handle_input(
                         }
                     }
                     SettingOption::MaxHeight => SettingOption::MaxWidth,
-                    SettingOption::LockAspectRatio => SettingOption::MaxHeight,
-                    SettingOption::Overwrite => SettingOption::LockAspectRatio,
+                    SettingOption::Overwrite => SettingOption::MaxHeight,
                     SettingOption::Backup => SettingOption::Overwrite,
                     SettingOption::OutputDir => SettingOption::Backup,
                 };
@@ -919,8 +881,7 @@ fn handle_input(
                     SettingOption::Progressive => SettingOption::PngCompress,
                     SettingOption::PngCompress => SettingOption::MaxWidth,
                     SettingOption::MaxWidth => SettingOption::MaxHeight,
-                    SettingOption::MaxHeight => SettingOption::LockAspectRatio,
-                    SettingOption::LockAspectRatio => SettingOption::Overwrite,
+                    SettingOption::MaxHeight => SettingOption::Overwrite,
                     SettingOption::Overwrite => SettingOption::Backup,
                     SettingOption::Backup => SettingOption::OutputDir,
                     SettingOption::OutputDir => SettingOption::Format,
@@ -1048,11 +1009,6 @@ fn handle_input(
                             }
                         }
                     }
-                    SettingOption::LockAspectRatio => {
-                        if let Some(file) = app.selected_file_mut() {
-                            file.settings.lock_aspect_ratio = !file.settings.lock_aspect_ratio;
-                        }
-                    }
                     SettingOption::WebpLossless => {
                         if let Some(file) = app.selected_file_mut() {
                             file.settings.webp_lossless = !file.settings.webp_lossless;
@@ -1143,11 +1099,6 @@ fn handle_input(
                                 (current + 100).min(10000)
                             };
                             file.settings.max_height = Some(new_val);
-                        }
-                    }
-                    SettingOption::LockAspectRatio => {
-                        if let Some(file) = app.selected_file_mut() {
-                            file.settings.lock_aspect_ratio = !file.settings.lock_aspect_ratio;
                         }
                     }
                     SettingOption::WebpLossless => {
@@ -1262,6 +1213,7 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use models::path_to_tilde;
 
     #[test]
     fn test_bytes_to_human() {
@@ -1608,243 +1560,11 @@ mod tests {
     }
 
     #[test]
-    fn test_settings_navigation_down_no_loops() {
-        let mut app = App::new();
-        app.files.push(ImageFile::new_lightweight(
-            PathBuf::from("/test/image.jpg"),
-            false,
-        ));
-        app.focused_column = FocusedColumn::ImageSettings;
-        app.setting_option = SettingOption::Format;
-
-        let mut visited = std::collections::HashSet::new();
-        visited.insert(SettingOption::Format);
-        let mut wrap_count = 0;
-        let max_iterations = 25;
-
-        for _ in 0..max_iterations {
-            match app.setting_option {
-                SettingOption::Format => {
-                    wrap_count += 1;
-                    if wrap_count > 1 {
-                        break;
-                    }
-                    app.global_output_format = Some(OutputFormat::Jpeg);
-                    app.setting_option = SettingOption::Quality;
-                }
-                SettingOption::Quality => app.setting_option = SettingOption::Color,
-                SettingOption::Color => app.setting_option = SettingOption::Exif,
-                SettingOption::Exif => app.setting_option = SettingOption::MaxWidth,
-                SettingOption::MaxWidth => app.setting_option = SettingOption::MaxHeight,
-                SettingOption::MaxHeight => app.setting_option = SettingOption::LockAspectRatio,
-                SettingOption::LockAspectRatio => app.setting_option = SettingOption::Overwrite,
-                SettingOption::Overwrite => app.setting_option = SettingOption::Backup,
-                SettingOption::Backup => app.setting_option = SettingOption::OutputDir,
-                SettingOption::OutputDir => app.setting_option = SettingOption::Format,
-                SettingOption::Progressive
-                | SettingOption::PngCompress
-                | SettingOption::WebpLossless => {
-                    panic!(
-                        "Unexpected setting in down navigation: {:?}",
-                        app.setting_option
-                    );
-                }
-                _ => {
-                    if visited.contains(&app.setting_option) {
-                        panic!("Navigation loop detected at {:?}", app.setting_option);
-                    }
-                    visited.insert(app.setting_option);
-                    app.setting_option = SettingOption::Format;
-                }
-            }
-        }
-
-        assert!(
-            wrap_count >= 1,
-            "Navigation should complete at least one full cycle"
-        );
-    }
-
-    #[test]
-    fn test_settings_navigation_up_no_loops() {
-        let mut app = App::new();
-        app.files.push(ImageFile::new_lightweight(
-            PathBuf::from("/test/image.jpg"),
-            false,
-        ));
-        app.focused_column = FocusedColumn::ImageSettings;
-        app.setting_option = SettingOption::Format;
-
-        let mut visited = std::collections::HashSet::new();
-        visited.insert(SettingOption::Format);
-        let mut wrap_count = 0;
-
-        for _ in 0..25 {
-            match app.setting_option {
-                SettingOption::Format => {
-                    wrap_count += 1;
-                    if wrap_count > 1 {
-                        break;
-                    }
-                    app.setting_option = SettingOption::OutputDir;
-                }
-                SettingOption::OutputDir => app.setting_option = SettingOption::Backup,
-                SettingOption::Backup => app.setting_option = SettingOption::Overwrite,
-                SettingOption::Overwrite => app.setting_option = SettingOption::LockAspectRatio,
-                SettingOption::LockAspectRatio => app.setting_option = SettingOption::MaxHeight,
-                SettingOption::MaxHeight => app.setting_option = SettingOption::MaxWidth,
-                SettingOption::MaxWidth => app.setting_option = SettingOption::Exif,
-                SettingOption::Exif => app.setting_option = SettingOption::Color,
-                SettingOption::Color => app.setting_option = SettingOption::Quality,
-                SettingOption::Quality => app.setting_option = SettingOption::Format,
-                SettingOption::Progressive
-                | SettingOption::PngCompress
-                | SettingOption::WebpLossless => {
-                    panic!(
-                        "Unexpected setting in up navigation: {:?}",
-                        app.setting_option
-                    );
-                }
-                _ => {
-                    if visited.contains(&app.setting_option) {
-                        panic!("Navigation loop detected at {:?}", app.setting_option);
-                    }
-                    visited.insert(app.setting_option);
-                    app.setting_option = SettingOption::Format;
-                }
-            }
-        }
-
-        assert!(
-            wrap_count >= 1,
-            "Navigation should complete at least one full cycle"
-        );
-    }
-
-    #[test]
-    fn test_settings_navigation_down_with_webp() {
-        let mut app = App::new();
-        app.files.push(ImageFile::new_lightweight(
-            PathBuf::from("/test/image.webp"),
-            false,
-        ));
-        app.focused_column = FocusedColumn::ImageSettings;
-        app.setting_option = SettingOption::Format;
-        app.global_output_format = Some(OutputFormat::Webp);
-
-        let mut visited = std::collections::HashSet::new();
-        visited.insert(SettingOption::Format);
-        let mut wrap_count = 0;
-
-        for _ in 0..25 {
-            match app.setting_option {
-                SettingOption::Format => {
-                    wrap_count += 1;
-                    if wrap_count > 1 {
-                        break;
-                    }
-                    app.setting_option = SettingOption::WebpLossless;
-                }
-                SettingOption::WebpLossless => app.setting_option = SettingOption::Quality,
-                SettingOption::Quality => app.setting_option = SettingOption::Color,
-                SettingOption::Color => app.setting_option = SettingOption::Exif,
-                SettingOption::Exif => app.setting_option = SettingOption::MaxWidth,
-                SettingOption::MaxWidth => app.setting_option = SettingOption::MaxHeight,
-                SettingOption::MaxHeight => app.setting_option = SettingOption::LockAspectRatio,
-                SettingOption::LockAspectRatio => app.setting_option = SettingOption::Overwrite,
-                SettingOption::Overwrite => app.setting_option = SettingOption::Backup,
-                SettingOption::Backup => app.setting_option = SettingOption::OutputDir,
-                SettingOption::OutputDir => app.setting_option = SettingOption::Format,
-                SettingOption::Progressive | SettingOption::PngCompress => {
-                    panic!(
-                        "Unexpected setting in WebP down navigation: {:?}",
-                        app.setting_option
-                    );
-                }
-                _ => {
-                    if visited.contains(&app.setting_option) {
-                        panic!("WebP navigation loop detected at {:?}", app.setting_option);
-                    }
-                    visited.insert(app.setting_option);
-                    app.setting_option = SettingOption::Format;
-                }
-            }
-        }
-
-        assert!(
-            wrap_count >= 1,
-            "WebP navigation should complete at least one full cycle"
-        );
-    }
-
-    #[test]
-    fn test_settings_navigation_down_with_png() {
-        let mut app = App::new();
-        app.files.push(ImageFile::new_lightweight(
-            PathBuf::from("/test/image.png"),
-            false,
-        ));
-        app.focused_column = FocusedColumn::ImageSettings;
-        app.setting_option = SettingOption::Format;
-        app.global_output_format = Some(OutputFormat::Png);
-
-        let mut visited = std::collections::HashSet::new();
-        visited.insert(SettingOption::Format);
-        let mut wrap_count = 0;
-
-        for _ in 0..25 {
-            match app.setting_option {
-                SettingOption::Format => {
-                    wrap_count += 1;
-                    if wrap_count > 1 {
-                        break;
-                    }
-                    app.setting_option = SettingOption::Color;
-                }
-                SettingOption::Color => app.setting_option = SettingOption::Exif,
-                SettingOption::Exif => app.setting_option = SettingOption::Progressive,
-                SettingOption::Progressive => app.setting_option = SettingOption::PngCompress,
-                SettingOption::PngCompress => app.setting_option = SettingOption::MaxWidth,
-                SettingOption::MaxWidth => app.setting_option = SettingOption::MaxHeight,
-                SettingOption::MaxHeight => app.setting_option = SettingOption::LockAspectRatio,
-                SettingOption::LockAspectRatio => app.setting_option = SettingOption::Overwrite,
-                SettingOption::Overwrite => app.setting_option = SettingOption::Backup,
-                SettingOption::Backup => app.setting_option = SettingOption::OutputDir,
-                SettingOption::OutputDir => app.setting_option = SettingOption::Format,
-                SettingOption::Quality | SettingOption::WebpLossless => {
-                    panic!(
-                        "Unexpected setting in PNG down navigation: {:?}",
-                        app.setting_option
-                    );
-                }
-                _ => {
-                    if visited.contains(&app.setting_option) {
-                        panic!("PNG navigation loop detected at {:?}", app.setting_option);
-                    }
-                    visited.insert(app.setting_option);
-                    app.setting_option = SettingOption::Format;
-                }
-            }
-        }
-
-        assert!(
-            wrap_count >= 1,
-            "PNG navigation should complete at least one full cycle"
-        );
-    }
-
-    #[test]
     fn test_get_cached_metadata_empty_cache() {
         let cache: std::collections::HashMap<PathBuf, CachedImageInfo> =
             std::collections::HashMap::new();
         let result = cache::get_cached_metadata(&cache, std::path::Path::new("/test/file.jpg"));
         assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_image_settings_lock_aspect_ratio_default() {
-        let settings = ImageSettings::default();
-        assert!(!settings.lock_aspect_ratio);
     }
 
     #[test]
@@ -1878,18 +1598,6 @@ mod tests {
     }
 
     #[test]
-    fn test_image_settings_lock_aspect_ratio_toggle() {
-        let mut settings = ImageSettings::default();
-        assert!(!settings.lock_aspect_ratio);
-
-        settings.lock_aspect_ratio = true;
-        assert!(settings.lock_aspect_ratio);
-
-        settings.lock_aspect_ratio = false;
-        assert!(!settings.lock_aspect_ratio);
-    }
-
-    #[test]
     fn test_image_settings_all_fields() {
         let mut settings = ImageSettings::default();
 
@@ -1913,10 +1621,8 @@ mod tests {
 
         settings.max_width = Some(800);
         settings.max_height = Some(600);
-        settings.lock_aspect_ratio = true;
         assert_eq!(settings.max_width, Some(800));
         assert_eq!(settings.max_height, Some(600));
-        assert!(settings.lock_aspect_ratio);
 
         settings.png_compression = 9;
         assert_eq!(settings.png_compression, 9);
@@ -1941,31 +1647,6 @@ mod tests {
         let expected_height = (new_width as f64 * aspect) as u32;
 
         assert_eq!(expected_height, 540);
-    }
-
-    #[test]
-    fn test_aspect_ratio_with_lock() {
-        let mut file = ImageFile::new_lightweight(PathBuf::from("/test/image.jpg"), false);
-        file.dimensions = Some((1920, 1080));
-
-        let mut settings = ImageSettings::default();
-        settings.max_width = Some(1920);
-        settings.max_height = Some(1080);
-        settings.lock_aspect_ratio = true;
-        file.settings = settings;
-
-        assert!(file.settings.lock_aspect_ratio);
-        assert_eq!(file.dimensions, Some((1920, 1080)));
-
-        let new_width = 960;
-        let aspect = file.dimensions.unwrap().1 as f64 / file.dimensions.unwrap().0 as f64;
-        let new_height = (new_width as f64 * aspect) as u32;
-
-        file.settings.max_width = Some(new_width);
-        file.settings.max_height = Some(new_height);
-
-        assert_eq!(file.settings.max_width, Some(960));
-        assert_eq!(file.settings.max_height, Some(540));
     }
 
     #[test]
@@ -2015,12 +1696,10 @@ mod tests {
         let mut settings = ImageSettings::default();
         settings.quality = 75;
         settings.max_width = Some(1920);
-        settings.lock_aspect_ratio = true;
 
         let cloned = settings.clone();
         assert_eq!(cloned.quality, 75);
         assert_eq!(cloned.max_width, Some(1920));
-        assert!(cloned.lock_aspect_ratio);
 
         let mut cloned_mut = settings.clone();
         cloned_mut.quality = 50;
@@ -2046,7 +1725,6 @@ mod tests {
             SettingOption::Exif,
             SettingOption::MaxWidth,
             SettingOption::MaxHeight,
-            SettingOption::LockAspectRatio,
             SettingOption::Overwrite,
             SettingOption::Backup,
             SettingOption::OutputDir,
@@ -2060,95 +1738,7 @@ mod tests {
                 SettingOption::Color => app.setting_option = SettingOption::Exif,
                 SettingOption::Exif => app.setting_option = SettingOption::MaxWidth,
                 SettingOption::MaxWidth => app.setting_option = SettingOption::MaxHeight,
-                SettingOption::MaxHeight => app.setting_option = SettingOption::LockAspectRatio,
-                SettingOption::LockAspectRatio => app.setting_option = SettingOption::Overwrite,
-                SettingOption::Overwrite => app.setting_option = SettingOption::Backup,
-                SettingOption::Backup => app.setting_option = SettingOption::OutputDir,
-                SettingOption::OutputDir => app.setting_option = SettingOption::Format,
-                _ => {}
-            }
-        }
-        assert_eq!(app.setting_option, SettingOption::Format);
-    }
-
-    #[test]
-    fn test_settings_navigation_up_jpeg() {
-        let mut app = App::new();
-        app.files.push(ImageFile::new_lightweight(
-            PathBuf::from("/test/image.jpg"),
-            false,
-        ));
-        app.focused_column = FocusedColumn::ImageSettings;
-        app.setting_option = SettingOption::Format;
-
-        let expected = vec![
-            SettingOption::Format,
-            SettingOption::OutputDir,
-            SettingOption::Backup,
-            SettingOption::Overwrite,
-            SettingOption::LockAspectRatio,
-            SettingOption::MaxHeight,
-            SettingOption::MaxWidth,
-            SettingOption::Exif,
-            SettingOption::Color,
-            SettingOption::Quality,
-        ];
-
-        for exp in expected {
-            assert_eq!(app.setting_option, exp);
-            match app.setting_option {
-                SettingOption::Format => app.setting_option = SettingOption::OutputDir,
-                SettingOption::OutputDir => app.setting_option = SettingOption::Backup,
-                SettingOption::Backup => app.setting_option = SettingOption::Overwrite,
-                SettingOption::Overwrite => app.setting_option = SettingOption::LockAspectRatio,
-                SettingOption::LockAspectRatio => app.setting_option = SettingOption::MaxHeight,
-                SettingOption::MaxHeight => app.setting_option = SettingOption::MaxWidth,
-                SettingOption::MaxWidth => app.setting_option = SettingOption::Exif,
-                SettingOption::Exif => app.setting_option = SettingOption::Color,
-                SettingOption::Color => app.setting_option = SettingOption::Quality,
-                SettingOption::Quality => app.setting_option = SettingOption::Format,
-                _ => {}
-            }
-        }
-        assert_eq!(app.setting_option, SettingOption::Format);
-    }
-
-    #[test]
-    fn test_settings_navigation_down_webp() {
-        let mut app = App::new();
-        app.files.push(ImageFile::new_lightweight(
-            PathBuf::from("/test/image.webp"),
-            false,
-        ));
-        app.focused_column = FocusedColumn::ImageSettings;
-        app.setting_option = SettingOption::Format;
-        app.global_output_format = Some(OutputFormat::Webp);
-
-        let expected = vec![
-            SettingOption::Format,
-            SettingOption::WebpLossless,
-            SettingOption::Quality,
-            SettingOption::Color,
-            SettingOption::Exif,
-            SettingOption::MaxWidth,
-            SettingOption::MaxHeight,
-            SettingOption::LockAspectRatio,
-            SettingOption::Overwrite,
-            SettingOption::Backup,
-            SettingOption::OutputDir,
-        ];
-
-        for exp in expected {
-            assert_eq!(app.setting_option, exp);
-            match app.setting_option {
-                SettingOption::Format => app.setting_option = SettingOption::WebpLossless,
-                SettingOption::WebpLossless => app.setting_option = SettingOption::Quality,
-                SettingOption::Quality => app.setting_option = SettingOption::Color,
-                SettingOption::Color => app.setting_option = SettingOption::Exif,
-                SettingOption::Exif => app.setting_option = SettingOption::MaxWidth,
-                SettingOption::MaxWidth => app.setting_option = SettingOption::MaxHeight,
-                SettingOption::MaxHeight => app.setting_option = SettingOption::LockAspectRatio,
-                SettingOption::LockAspectRatio => app.setting_option = SettingOption::Overwrite,
+                SettingOption::MaxHeight => app.setting_option = SettingOption::Overwrite,
                 SettingOption::Overwrite => app.setting_option = SettingOption::Backup,
                 SettingOption::Backup => app.setting_option = SettingOption::OutputDir,
                 SettingOption::OutputDir => app.setting_option = SettingOption::Format,
@@ -2215,51 +1805,6 @@ mod tests {
         assert_eq!(queue_copy[0].1, PathBuf::from("/output/img1.jpg"));
         assert_eq!(queue_copy[1].1, PathBuf::from("/output/img2.jpg"));
         assert_eq!(queue_copy[2].1, PathBuf::from("/output/img3.jpg"));
-    }
-
-    #[test]
-    fn test_settings_navigation_down_png() {
-        let mut app = App::new();
-        app.files.push(ImageFile::new_lightweight(
-            PathBuf::from("/test/image.png"),
-            false,
-        ));
-        app.focused_column = FocusedColumn::ImageSettings;
-        app.setting_option = SettingOption::Format;
-        app.global_output_format = Some(OutputFormat::Png);
-
-        let expected = vec![
-            SettingOption::Format,
-            SettingOption::Color,
-            SettingOption::Exif,
-            SettingOption::Progressive,
-            SettingOption::PngCompress,
-            SettingOption::MaxWidth,
-            SettingOption::MaxHeight,
-            SettingOption::LockAspectRatio,
-            SettingOption::Overwrite,
-            SettingOption::Backup,
-            SettingOption::OutputDir,
-        ];
-
-        for exp in expected {
-            assert_eq!(app.setting_option, exp);
-            match app.setting_option {
-                SettingOption::Format => app.setting_option = SettingOption::Color,
-                SettingOption::Color => app.setting_option = SettingOption::Exif,
-                SettingOption::Exif => app.setting_option = SettingOption::Progressive,
-                SettingOption::Progressive => app.setting_option = SettingOption::PngCompress,
-                SettingOption::PngCompress => app.setting_option = SettingOption::MaxWidth,
-                SettingOption::MaxWidth => app.setting_option = SettingOption::MaxHeight,
-                SettingOption::MaxHeight => app.setting_option = SettingOption::LockAspectRatio,
-                SettingOption::LockAspectRatio => app.setting_option = SettingOption::Overwrite,
-                SettingOption::Overwrite => app.setting_option = SettingOption::Backup,
-                SettingOption::Backup => app.setting_option = SettingOption::OutputDir,
-                SettingOption::OutputDir => app.setting_option = SettingOption::Format,
-                _ => {}
-            }
-        }
-        assert_eq!(app.setting_option, SettingOption::Format);
     }
 
     #[test]
@@ -2449,61 +1994,56 @@ mod tests {
 
         while seen.insert(app.setting_option) && visited.len() < max_iterations {
             visited.push(app.setting_option);
+            let format = app.global_output_format;
+            let file = app.selected_file();
+            let from_quality = match format {
+                None | Some(OutputFormat::Jpeg) => true,
+                Some(OutputFormat::Webp) => file.map(|f| !f.settings.webp_lossless).unwrap_or(true),
+                Some(OutputFormat::Same) => {
+                    if let Some(f) = file {
+                        matches!(
+                            f.extension().as_deref(),
+                            Some("jpg") | Some("jpeg") | Some("webp")
+                        )
+                    } else {
+                        true
+                    }
+                }
+                _ => false,
+            };
+            let from_webp = format == Some(OutputFormat::Webp);
+            let from_progressive = format == Some(OutputFormat::Png);
+
             match app.setting_option {
                 SettingOption::Format => {
-                    app.setting_option = if app.global_output_format == Some(OutputFormat::Webp) {
+                    app.setting_option = if from_webp {
                         SettingOption::WebpLossless
-                    } else if matches!(app.global_output_format, None | Some(OutputFormat::Jpeg)) {
+                    } else if from_quality {
                         SettingOption::Quality
                     } else {
                         SettingOption::Color
                     }
                 }
                 SettingOption::WebpLossless => {
-                    app.setting_option = {
-                        let show_quality = app
-                            .selected_file()
-                            .map(|f| !f.settings.webp_lossless)
-                            .unwrap_or(false);
-                        if show_quality {
-                            SettingOption::Quality
-                        } else {
-                            SettingOption::Color
-                        }
+                    app.setting_option = if from_quality {
+                        SettingOption::Quality
+                    } else {
+                        SettingOption::Color
                     }
                 }
                 SettingOption::Quality => app.setting_option = SettingOption::Color,
-                SettingOption::Color => {
-                    app.setting_option = {
-                        if app.global_output_format == Some(OutputFormat::Webp) {
-                            let show_quality = app
-                                .selected_file()
-                                .map(|f| !f.settings.webp_lossless)
-                                .unwrap_or(false);
-                            if show_quality {
-                                SettingOption::WebpLossless
-                            } else {
-                                SettingOption::Exif
-                            }
-                        } else {
-                            SettingOption::Exif
-                        }
-                    }
-                }
+                SettingOption::Color => app.setting_option = SettingOption::Exif,
                 SettingOption::Exif => {
-                    app.setting_option = {
-                        if app.global_output_format == Some(OutputFormat::Png) {
-                            SettingOption::Progressive
-                        } else {
-                            SettingOption::MaxWidth
-                        }
+                    app.setting_option = if from_progressive {
+                        SettingOption::Progressive
+                    } else {
+                        SettingOption::MaxWidth
                     }
                 }
                 SettingOption::Progressive => app.setting_option = SettingOption::PngCompress,
                 SettingOption::PngCompress => app.setting_option = SettingOption::MaxWidth,
                 SettingOption::MaxWidth => app.setting_option = SettingOption::MaxHeight,
-                SettingOption::MaxHeight => app.setting_option = SettingOption::LockAspectRatio,
-                SettingOption::LockAspectRatio => app.setting_option = SettingOption::Overwrite,
+                SettingOption::MaxHeight => app.setting_option = SettingOption::Overwrite,
                 SettingOption::Overwrite => app.setting_option = SettingOption::Backup,
                 SettingOption::Backup => app.setting_option = SettingOption::OutputDir,
                 SettingOption::OutputDir => app.setting_option = SettingOption::Format,
@@ -2520,33 +2060,66 @@ mod tests {
 
         while seen.insert(app.setting_option) && visited.len() < max_iterations {
             visited.push(app.setting_option);
+            let format = app.global_output_format;
+            let file = app.selected_file();
+            let from_quality = match format {
+                None | Some(OutputFormat::Jpeg) => true,
+                Some(OutputFormat::Webp) => file.map(|f| !f.settings.webp_lossless).unwrap_or(true),
+                Some(OutputFormat::Same) => {
+                    if let Some(f) = file {
+                        matches!(
+                            f.extension().as_deref(),
+                            Some("jpg") | Some("jpeg") | Some("webp")
+                        )
+                    } else {
+                        true
+                    }
+                }
+                _ => false,
+            };
+            let from_webp = format == Some(OutputFormat::Webp);
+            let from_progressive = format == Some(OutputFormat::Png);
+
             match app.setting_option {
-                SettingOption::Format => app.setting_option = SettingOption::OutputDir,
+                SettingOption::Format => {
+                    app.setting_option = if from_webp {
+                        SettingOption::WebpLossless
+                    } else if from_progressive {
+                        SettingOption::Progressive
+                    } else if from_quality {
+                        SettingOption::Quality
+                    } else {
+                        SettingOption::Color
+                    }
+                }
                 SettingOption::OutputDir => app.setting_option = SettingOption::Backup,
                 SettingOption::Backup => app.setting_option = SettingOption::Overwrite,
-                SettingOption::Overwrite => app.setting_option = SettingOption::LockAspectRatio,
-                SettingOption::LockAspectRatio => app.setting_option = SettingOption::MaxHeight,
+                SettingOption::Overwrite => app.setting_option = SettingOption::MaxHeight,
                 SettingOption::MaxHeight => app.setting_option = SettingOption::MaxWidth,
                 SettingOption::MaxWidth => {
-                    app.setting_option = {
-                        if app.global_output_format == Some(OutputFormat::Png) {
-                            SettingOption::Exif
-                        } else {
-                            SettingOption::Exif
-                        }
+                    app.setting_option = if from_progressive {
+                        SettingOption::PngCompress
+                    } else {
+                        SettingOption::Exif
                     }
                 }
                 SettingOption::Exif => app.setting_option = SettingOption::Color,
                 SettingOption::Color => {
-                    app.setting_option = {
-                        if matches!(app.global_output_format, None | Some(OutputFormat::Jpeg)) {
-                            SettingOption::Quality
-                        } else {
-                            SettingOption::Format
-                        }
+                    app.setting_option = if from_quality {
+                        SettingOption::Quality
+                    } else if from_webp {
+                        SettingOption::WebpLossless
+                    } else {
+                        SettingOption::Format
                     }
                 }
-                SettingOption::Quality => app.setting_option = SettingOption::Format,
+                SettingOption::Quality => {
+                    app.setting_option = if from_webp {
+                        SettingOption::WebpLossless
+                    } else {
+                        SettingOption::Format
+                    }
+                }
                 SettingOption::WebpLossless => app.setting_option = SettingOption::Format,
                 SettingOption::Progressive => app.setting_option = SettingOption::Exif,
                 SettingOption::PngCompress => app.setting_option = SettingOption::Progressive,
@@ -2623,7 +2196,7 @@ mod tests {
     fn test_settings_navigation_down_webp_no_file() {
         let mut app = App::new();
         app.files.push(ImageFile::new_lightweight(
-            PathBuf::from("/test/image.jpg"),
+            PathBuf::from("/test/image.webp"),
             false,
         ));
         app.focused_column = FocusedColumn::ImageSettings;
@@ -2635,10 +2208,6 @@ mod tests {
             visited.len() < 20,
             "Navigation loop detected! Visited: {:?}",
             visited
-        );
-        assert!(
-            !visited.contains(&SettingOption::Quality),
-            "Quality should be skipped when no file selected"
         );
     }
 

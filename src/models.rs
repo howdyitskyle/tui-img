@@ -5,6 +5,20 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+pub fn path_to_tilde(path: &Path) -> String {
+    if let Ok(home) = std::env::var("HOME") {
+        let home_str = home.trim_end_matches('/');
+        let path_str = path.to_string_lossy().trim_end_matches('/').to_string();
+        if let Some(after_home) = path_str.strip_prefix(home_str) {
+            if after_home.is_empty() {
+                return "~".to_string();
+            }
+            return format!("~{}", after_home);
+        }
+    }
+    path.to_string_lossy().to_string()
+}
+
 #[derive(Clone)]
 pub struct ImageSettings {
     pub quality: u8,
@@ -15,7 +29,6 @@ pub struct ImageSettings {
     pub progressive: bool,
     pub max_width: Option<u32>,
     pub max_height: Option<u32>,
-    pub lock_aspect_ratio: bool,
     pub png_compression: u8,
     pub webp_lossless: bool,
     pub overwrite: bool,
@@ -33,7 +46,6 @@ impl Default for ImageSettings {
             progressive: false,
             max_width: None,
             max_height: None,
-            lock_aspect_ratio: false,
             png_compression: 6,
             webp_lossless: false,
             overwrite: false,
@@ -168,7 +180,7 @@ impl ExifData {
 }
 
 #[derive(Clone)]
-pub(crate) struct CachedImageInfo {
+pub struct CachedImageInfo {
     pub dimensions: Option<(u32, u32)>,
     pub color_type: Option<String>,
     pub file_mtime: u64,
