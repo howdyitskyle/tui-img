@@ -654,26 +654,23 @@ fn handle_input(
             KeyCode::Enter => {
                 let input = app.input_buffer.clone();
                 match app.input_target {
-                    SettingOption::OutputDir => {
-                        if !input.is_empty() {
-                            let final_path: PathBuf =
-                                if let Some(remainder) = input.strip_prefix('~') {
-                                    if let Ok(home) = std::env::var("HOME") {
-                                        if remainder.is_empty() || remainder.starts_with('/') {
-                                            PathBuf::from(home).join(&input[2..])
-                                        } else {
-                                            PathBuf::from(home).join(remainder)
-                                        }
-                                    } else {
-                                        PathBuf::from(&input)
-                                    }
-                                } else if PathBuf::from(&input).is_absolute() {
-                                    PathBuf::from(&input)
+                    SettingOption::OutputDir if !input.is_empty() => {
+                        let final_path: PathBuf = if let Some(remainder) = input.strip_prefix('~') {
+                            if let Ok(home) = std::env::var("HOME") {
+                                if remainder.is_empty() || remainder.starts_with('/') {
+                                    PathBuf::from(home).join(&input[2..])
                                 } else {
-                                    app.current_dir.join(&input)
-                                };
-                            app.global_output_directory = Some(final_path);
-                        }
+                                    PathBuf::from(home).join(remainder)
+                                }
+                            } else {
+                                PathBuf::from(&input)
+                            }
+                        } else if PathBuf::from(&input).is_absolute() {
+                            PathBuf::from(&input)
+                        } else {
+                            app.current_dir.join(&input)
+                        };
+                        app.global_output_directory = Some(final_path);
                     }
                     SettingOption::MaxWidth => {
                         if let Some(file) = app.selected_file_mut() {
@@ -705,10 +702,10 @@ fn handle_input(
             KeyCode::Backspace => {
                 app.input_buffer.pop();
             }
-            KeyCode::Char(c) => {
-                if matches!(app.input_target, SettingOption::OutputDir) || c.is_ascii_digit() {
-                    app.input_buffer.push(c);
-                }
+            KeyCode::Char(c)
+                if matches!(app.input_target, SettingOption::OutputDir) || c.is_ascii_digit() =>
+            {
+                app.input_buffer.push(c);
             }
             _ => {}
         }
@@ -754,14 +751,12 @@ fn handle_input(
     }
 
     match key.code {
-        KeyCode::Tab => {
-            if app.show_settings {
-                app.focused_column = match app.focused_column {
-                    FocusedColumn::Files => FocusedColumn::ImageSettings,
-                    FocusedColumn::ImageSettings => FocusedColumn::Output,
-                    FocusedColumn::Output => FocusedColumn::Files,
-                };
-            }
+        KeyCode::Tab if app.show_settings => {
+            app.focused_column = match app.focused_column {
+                FocusedColumn::Files => FocusedColumn::ImageSettings,
+                FocusedColumn::ImageSettings => FocusedColumn::Output,
+                FocusedColumn::Output => FocusedColumn::Files,
+            };
         }
         KeyCode::Up | KeyCode::Char('k') => {
             if app.focused_column == FocusedColumn::Files {
@@ -888,262 +883,243 @@ fn handle_input(
                 };
             }
         }
-        KeyCode::PageUp => {
-            if app.focused_column == FocusedColumn::Files && !app.files.is_empty() {
-                let new_idx = app
-                    .selected_index
-                    .unwrap_or(0)
-                    .saturating_sub(app.visible_rows);
-                app.selected_index = Some(new_idx);
-                app.list_state.select(Some(new_idx));
-                app.scroll_offset = app.scroll_offset.saturating_sub(app.visible_rows);
-                if let Some(file) = app.files.get_mut(new_idx) {
-                    file.load_exif_if_needed(&mut app.exif_cache);
-                }
-                app.preload_exif_batch(new_idx, 10);
+        KeyCode::PageUp if app.focused_column == FocusedColumn::Files && !app.files.is_empty() => {
+            let new_idx = app
+                .selected_index
+                .unwrap_or(0)
+                .saturating_sub(app.visible_rows);
+            app.selected_index = Some(new_idx);
+            app.list_state.select(Some(new_idx));
+            app.scroll_offset = app.scroll_offset.saturating_sub(app.visible_rows);
+            if let Some(file) = app.files.get_mut(new_idx) {
+                file.load_exif_if_needed(&mut app.exif_cache);
             }
+            app.preload_exif_batch(new_idx, 10);
         }
-        KeyCode::PageDown => {
-            if app.focused_column == FocusedColumn::Files && !app.files.is_empty() {
-                let max_idx = app.files.len() - 1;
-                let new_idx = (app.selected_index.unwrap_or(0) + app.visible_rows).min(max_idx);
-                app.selected_index = Some(new_idx);
-                app.list_state.select(Some(new_idx));
-                app.scroll_offset = (app.scroll_offset + app.visible_rows)
-                    .min(max_idx.saturating_sub(app.visible_rows - 1));
-                if let Some(file) = app.files.get_mut(new_idx) {
-                    file.load_exif_if_needed(&mut app.exif_cache);
-                }
-                app.preload_exif_batch(new_idx, 10);
+        KeyCode::PageDown
+            if app.focused_column == FocusedColumn::Files && !app.files.is_empty() =>
+        {
+            let max_idx = app.files.len() - 1;
+            let new_idx = (app.selected_index.unwrap_or(0) + app.visible_rows).min(max_idx);
+            app.selected_index = Some(new_idx);
+            app.list_state.select(Some(new_idx));
+            app.scroll_offset = (app.scroll_offset + app.visible_rows)
+                .min(max_idx.saturating_sub(app.visible_rows - 1));
+            if let Some(file) = app.files.get_mut(new_idx) {
+                file.load_exif_if_needed(&mut app.exif_cache);
             }
+            app.preload_exif_batch(new_idx, 10);
         }
-        KeyCode::Home => {
-            if app.focused_column == FocusedColumn::Files && !app.files.is_empty() {
-                app.selected_index = Some(0);
-                app.list_state.select(Some(0));
-                app.scroll_offset = 0;
-                if let Some(file) = app.files.first_mut() {
-                    file.load_exif_if_needed(&mut app.exif_cache);
-                }
-                app.preload_exif_batch(0, 10);
+        KeyCode::Home if app.focused_column == FocusedColumn::Files && !app.files.is_empty() => {
+            app.selected_index = Some(0);
+            app.list_state.select(Some(0));
+            app.scroll_offset = 0;
+            if let Some(file) = app.files.first_mut() {
+                file.load_exif_if_needed(&mut app.exif_cache);
             }
+            app.preload_exif_batch(0, 10);
         }
-        KeyCode::End => {
-            if app.focused_column == FocusedColumn::Files && !app.files.is_empty() {
-                let max_idx = app.files.len() - 1;
-                app.selected_index = Some(max_idx);
-                app.list_state.select(Some(max_idx));
-                app.scroll_offset = max_idx.saturating_sub(app.visible_rows - 1);
-                if let Some(file) = app.files.last_mut() {
-                    file.load_exif_if_needed(&mut app.exif_cache);
-                }
-                app.preload_exif_batch(max_idx, 10);
+        KeyCode::End if app.focused_column == FocusedColumn::Files && !app.files.is_empty() => {
+            let max_idx = app.files.len() - 1;
+            app.selected_index = Some(max_idx);
+            app.list_state.select(Some(max_idx));
+            app.scroll_offset = max_idx.saturating_sub(app.visible_rows - 1);
+            if let Some(file) = app.files.last_mut() {
+                file.load_exif_if_needed(&mut app.exif_cache);
             }
+            app.preload_exif_batch(max_idx, 10);
         }
-        KeyCode::Left => {
-            if app.focused_column == FocusedColumn::ImageSettings {
-                match app.setting_option {
-                    SettingOption::Quality => {
-                        if let Some(file) = app.selected_file_mut() {
-                            file.settings.quality = file.settings.quality.saturating_sub(5);
-                        }
-                        app.default_quality = app.default_quality.saturating_sub(5);
+        KeyCode::Left if app.focused_column == FocusedColumn::ImageSettings => {
+            match app.setting_option {
+                SettingOption::Quality => {
+                    if let Some(file) = app.selected_file_mut() {
+                        file.settings.quality = file.settings.quality.saturating_sub(5);
                     }
-                    SettingOption::Color => {
-                        if let Some(file) = app.selected_file_mut() {
-                            file.settings.color_space = match file.settings.color_space {
-                                ColorSpace::Rgba => ColorSpace::Grayscale,
-                                ColorSpace::Grayscale => ColorSpace::Rgb,
-                                ColorSpace::Rgb => ColorSpace::Rgba,
-                            };
-                        }
-                    }
-                    SettingOption::Exif => {
-                        if let Some(file) = app.selected_file_mut() {
-                            file.settings.remove_exif = !file.settings.remove_exif;
-                        }
-                    }
-                    SettingOption::Format => {
-                        app.global_output_format = match app.global_output_format {
-                            None => Some(OutputFormat::Tga),
-                            Some(OutputFormat::Same) => Some(OutputFormat::Tga),
-                            Some(OutputFormat::Jpeg) => None,
-                            Some(OutputFormat::Png) => Some(OutputFormat::Jpeg),
-                            Some(OutputFormat::Webp) => Some(OutputFormat::Png),
-                            Some(OutputFormat::Gif) => Some(OutputFormat::Webp),
-                            Some(OutputFormat::Tiff) => Some(OutputFormat::Gif),
-                            Some(OutputFormat::Bmp) => Some(OutputFormat::Tiff),
-                            Some(OutputFormat::Tga) => Some(OutputFormat::Bmp),
+                    app.default_quality = app.default_quality.saturating_sub(5);
+                }
+                SettingOption::Color => {
+                    if let Some(file) = app.selected_file_mut() {
+                        file.settings.color_space = match file.settings.color_space {
+                            ColorSpace::Rgba => ColorSpace::Grayscale,
+                            ColorSpace::Grayscale => ColorSpace::Rgb,
+                            ColorSpace::Rgb => ColorSpace::Rgba,
                         };
                     }
-                    SettingOption::Progressive => {
-                        if let Some(file) = app.selected_file_mut() {
-                            file.settings.progressive = !file.settings.progressive;
-                        }
+                }
+                SettingOption::Exif => {
+                    if let Some(file) = app.selected_file_mut() {
+                        file.settings.remove_exif = !file.settings.remove_exif;
                     }
-                    SettingOption::PngCompress => {
-                        if let Some(file) = app.selected_file_mut() {
-                            file.settings.png_compression =
-                                file.settings.png_compression.saturating_sub(1);
-                        }
+                }
+                SettingOption::Format => {
+                    app.global_output_format = match app.global_output_format {
+                        None => Some(OutputFormat::Tga),
+                        Some(OutputFormat::Same) => Some(OutputFormat::Tga),
+                        Some(OutputFormat::Jpeg) => None,
+                        Some(OutputFormat::Png) => Some(OutputFormat::Jpeg),
+                        Some(OutputFormat::Webp) => Some(OutputFormat::Png),
+                        Some(OutputFormat::Gif) => Some(OutputFormat::Webp),
+                        Some(OutputFormat::Tiff) => Some(OutputFormat::Gif),
+                        Some(OutputFormat::Bmp) => Some(OutputFormat::Tiff),
+                        Some(OutputFormat::Tga) => Some(OutputFormat::Bmp),
+                    };
+                }
+                SettingOption::Progressive => {
+                    if let Some(file) = app.selected_file_mut() {
+                        file.settings.progressive = !file.settings.progressive;
                     }
-                    SettingOption::MaxWidth => {
-                        if let Some(file) = app.selected_file_mut() {
-                            let current = file.settings.max_width.unwrap_or(0);
-                            let new_val = current.saturating_sub(100);
-                            if new_val > 0 {
-                                file.settings.max_width = Some(new_val);
-                            } else {
-                                file.settings.max_width = None;
-                            }
-                        }
+                }
+                SettingOption::PngCompress => {
+                    if let Some(file) = app.selected_file_mut() {
+                        file.settings.png_compression =
+                            file.settings.png_compression.saturating_sub(1);
                     }
-                    SettingOption::MaxHeight => {
-                        if let Some(file) = app.selected_file_mut() {
-                            let current = file.settings.max_height.unwrap_or(0);
-                            let new_val = current.saturating_sub(100);
-                            if new_val > 0 {
-                                file.settings.max_height = Some(new_val);
-                            } else {
-                                file.settings.max_height = None;
-                            }
-                        }
-                    }
-                    SettingOption::WebpLossless => {
-                        if let Some(file) = app.selected_file_mut() {
-                            file.settings.webp_lossless = !file.settings.webp_lossless;
-                        }
-                    }
-                    SettingOption::Overwrite => {
-                        if let Some(file) = app.selected_file_mut() {
-                            file.settings.overwrite = !file.settings.overwrite;
-                        }
-                    }
-                    SettingOption::Backup => {
-                        if let Some(file) = app.selected_file_mut() {
-                            file.settings.backup = !file.settings.backup;
-                        }
-                    }
-                    SettingOption::OutputDir => {
-                        app.input_mode = true;
-                        app.input_target = SettingOption::OutputDir;
-                        app.input_buffer.clear();
-                    }
-                };
-            }
-        }
-        KeyCode::Right => {
-            if app.focused_column == FocusedColumn::ImageSettings {
-                match app.setting_option {
-                    SettingOption::Quality => {
-                        if let Some(file) = app.selected_file_mut() {
-                            file.settings.quality = (file.settings.quality + 5).min(100);
-                        }
-                        app.default_quality = (app.default_quality + 5).min(100);
-                    }
-                    SettingOption::Color => {
-                        if let Some(file) = app.selected_file_mut() {
-                            file.settings.color_space = match file.settings.color_space {
-                                ColorSpace::Rgb => ColorSpace::Rgba,
-                                ColorSpace::Grayscale => ColorSpace::Rgb,
-                                ColorSpace::Rgba => ColorSpace::Grayscale,
-                            };
-                        }
-                    }
-                    SettingOption::Exif => {
-                        if let Some(file) = app.selected_file_mut() {
-                            file.settings.remove_exif = !file.settings.remove_exif;
-                        }
-                    }
-                    SettingOption::Format => {
-                        app.global_output_format = match app.global_output_format {
-                            None => Some(OutputFormat::Jpeg),
-                            Some(OutputFormat::Same) => Some(OutputFormat::Jpeg),
-                            Some(OutputFormat::Jpeg) => Some(OutputFormat::Png),
-                            Some(OutputFormat::Png) => Some(OutputFormat::Webp),
-                            Some(OutputFormat::Webp) => Some(OutputFormat::Gif),
-                            Some(OutputFormat::Gif) => Some(OutputFormat::Tiff),
-                            Some(OutputFormat::Tiff) => Some(OutputFormat::Bmp),
-                            Some(OutputFormat::Bmp) => Some(OutputFormat::Tga),
-                            Some(OutputFormat::Tga) => None,
-                        };
-                    }
-                    SettingOption::Progressive => {
-                        if let Some(file) = app.selected_file_mut() {
-                            file.settings.progressive = !file.settings.progressive;
-                        }
-                    }
-                    SettingOption::PngCompress => {
-                        if let Some(file) = app.selected_file_mut() {
-                            file.settings.png_compression =
-                                (file.settings.png_compression + 1).min(9);
-                        }
-                    }
-                    SettingOption::MaxWidth => {
-                        if let Some(file) = app.selected_file_mut() {
-                            let current = file.settings.max_width.unwrap_or(0);
-                            let new_val = if current == 0 {
-                                100
-                            } else {
-                                (current + 100).min(10000)
-                            };
+                }
+                SettingOption::MaxWidth => {
+                    if let Some(file) = app.selected_file_mut() {
+                        let current = file.settings.max_width.unwrap_or(0);
+                        let new_val = current.saturating_sub(100);
+                        if new_val > 0 {
                             file.settings.max_width = Some(new_val);
+                        } else {
+                            file.settings.max_width = None;
                         }
                     }
-                    SettingOption::MaxHeight => {
-                        if let Some(file) = app.selected_file_mut() {
-                            let current = file.settings.max_height.unwrap_or(0);
-                            let new_val = if current == 0 {
-                                100
-                            } else {
-                                (current + 100).min(10000)
-                            };
-                            file.settings.max_height = Some(new_val);
-                        }
-                    }
-                    SettingOption::WebpLossless => {
-                        if let Some(file) = app.selected_file_mut() {
-                            file.settings.webp_lossless = !file.settings.webp_lossless;
-                        }
-                    }
-                    SettingOption::Overwrite => {
-                        if let Some(file) = app.selected_file_mut() {
-                            file.settings.overwrite = !file.settings.overwrite;
-                        }
-                    }
-                    SettingOption::Backup => {
-                        if let Some(file) = app.selected_file_mut() {
-                            file.settings.backup = !file.settings.backup;
-                        }
-                    }
-                    SettingOption::OutputDir => {
-                        app.input_mode = true;
-                        app.input_target = SettingOption::OutputDir;
-                        app.input_buffer.clear();
-                    }
-                };
-            }
-        }
-        KeyCode::Enter => {
-            if app.focused_column == FocusedColumn::Files {
-                app.enter_directory();
-            }
-        }
-        KeyCode::Backspace => {
-            if app.focused_column == FocusedColumn::Files {
-                app.navigate_up();
-            }
-        }
-        KeyCode::Char(' ') => {
-            if app.focused_column == FocusedColumn::Files {
-                app.toggle_queue();
-            }
-        }
-        KeyCode::Char('c') => {
-            if !app.queue.is_empty() && !app.compressing {
-                if let Some(tx) = compression_tx.lock().unwrap().as_ref() {
-                    app.compress_queue(tx.clone());
                 }
+                SettingOption::MaxHeight => {
+                    if let Some(file) = app.selected_file_mut() {
+                        let current = file.settings.max_height.unwrap_or(0);
+                        let new_val = current.saturating_sub(100);
+                        if new_val > 0 {
+                            file.settings.max_height = Some(new_val);
+                        } else {
+                            file.settings.max_height = None;
+                        }
+                    }
+                }
+                SettingOption::WebpLossless => {
+                    if let Some(file) = app.selected_file_mut() {
+                        file.settings.webp_lossless = !file.settings.webp_lossless;
+                    }
+                }
+                SettingOption::Overwrite => {
+                    if let Some(file) = app.selected_file_mut() {
+                        file.settings.overwrite = !file.settings.overwrite;
+                    }
+                }
+                SettingOption::Backup => {
+                    if let Some(file) = app.selected_file_mut() {
+                        file.settings.backup = !file.settings.backup;
+                    }
+                }
+                SettingOption::OutputDir => {
+                    app.input_mode = true;
+                    app.input_target = SettingOption::OutputDir;
+                    app.input_buffer.clear();
+                }
+            };
+        }
+        KeyCode::Right if app.focused_column == FocusedColumn::ImageSettings => {
+            match app.setting_option {
+                SettingOption::Quality => {
+                    if let Some(file) = app.selected_file_mut() {
+                        file.settings.quality = (file.settings.quality + 5).min(100);
+                    }
+                    app.default_quality = (app.default_quality + 5).min(100);
+                }
+                SettingOption::Color => {
+                    if let Some(file) = app.selected_file_mut() {
+                        file.settings.color_space = match file.settings.color_space {
+                            ColorSpace::Rgb => ColorSpace::Rgba,
+                            ColorSpace::Grayscale => ColorSpace::Rgb,
+                            ColorSpace::Rgba => ColorSpace::Grayscale,
+                        };
+                    }
+                }
+                SettingOption::Exif => {
+                    if let Some(file) = app.selected_file_mut() {
+                        file.settings.remove_exif = !file.settings.remove_exif;
+                    }
+                }
+                SettingOption::Format => {
+                    app.global_output_format = match app.global_output_format {
+                        None => Some(OutputFormat::Jpeg),
+                        Some(OutputFormat::Same) => Some(OutputFormat::Jpeg),
+                        Some(OutputFormat::Jpeg) => Some(OutputFormat::Png),
+                        Some(OutputFormat::Png) => Some(OutputFormat::Webp),
+                        Some(OutputFormat::Webp) => Some(OutputFormat::Gif),
+                        Some(OutputFormat::Gif) => Some(OutputFormat::Tiff),
+                        Some(OutputFormat::Tiff) => Some(OutputFormat::Bmp),
+                        Some(OutputFormat::Bmp) => Some(OutputFormat::Tga),
+                        Some(OutputFormat::Tga) => None,
+                    };
+                }
+                SettingOption::Progressive => {
+                    if let Some(file) = app.selected_file_mut() {
+                        file.settings.progressive = !file.settings.progressive;
+                    }
+                }
+                SettingOption::PngCompress => {
+                    if let Some(file) = app.selected_file_mut() {
+                        file.settings.png_compression = (file.settings.png_compression + 1).min(9);
+                    }
+                }
+                SettingOption::MaxWidth => {
+                    if let Some(file) = app.selected_file_mut() {
+                        let current = file.settings.max_width.unwrap_or(0);
+                        let new_val = if current == 0 {
+                            100
+                        } else {
+                            (current + 100).min(10000)
+                        };
+                        file.settings.max_width = Some(new_val);
+                    }
+                }
+                SettingOption::MaxHeight => {
+                    if let Some(file) = app.selected_file_mut() {
+                        let current = file.settings.max_height.unwrap_or(0);
+                        let new_val = if current == 0 {
+                            100
+                        } else {
+                            (current + 100).min(10000)
+                        };
+                        file.settings.max_height = Some(new_val);
+                    }
+                }
+                SettingOption::WebpLossless => {
+                    if let Some(file) = app.selected_file_mut() {
+                        file.settings.webp_lossless = !file.settings.webp_lossless;
+                    }
+                }
+                SettingOption::Overwrite => {
+                    if let Some(file) = app.selected_file_mut() {
+                        file.settings.overwrite = !file.settings.overwrite;
+                    }
+                }
+                SettingOption::Backup => {
+                    if let Some(file) = app.selected_file_mut() {
+                        file.settings.backup = !file.settings.backup;
+                    }
+                }
+                SettingOption::OutputDir => {
+                    app.input_mode = true;
+                    app.input_target = SettingOption::OutputDir;
+                    app.input_buffer.clear();
+                }
+            };
+        }
+        KeyCode::Enter if app.focused_column == FocusedColumn::Files => {
+            app.enter_directory();
+        }
+        KeyCode::Backspace if app.focused_column == FocusedColumn::Files => {
+            app.navigate_up();
+        }
+        KeyCode::Char(' ') if app.focused_column == FocusedColumn::Files => {
+            app.toggle_queue();
+        }
+        KeyCode::Char('c') if !app.queue.is_empty() && !app.compressing => {
+            if let Some(tx) = compression_tx.lock().unwrap().as_ref() {
+                app.compress_queue(tx.clone());
             }
         }
         KeyCode::Char('C') => {
