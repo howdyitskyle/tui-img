@@ -6,7 +6,7 @@ A powerful terminal-based image batch compression and conversion tool built with
 ![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-<img width="3792" height="2060" alt="screenshot-2026-04-16_13-45-50" src="https://github.com/user-attachments/assets/d57d842a-7326-423d-b0f8-41969d5d26d9" />
+![screenshot](https://github.com/user-attachments/assets/d57d842a-7326-423d-b0f8-41969d5d26d9)
 
 ## Features
 
