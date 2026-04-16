@@ -105,7 +105,7 @@ pub fn compress_image(
     ))
 }
 
-fn apply_processing(img: image::DynamicImage, settings: &ImageSettings) -> image::DynamicImage {
+pub fn apply_processing(img: image::DynamicImage, settings: &ImageSettings) -> image::DynamicImage {
     let img = match (settings.max_width, settings.max_height) {
         (Some(max_w), Some(max_h)) => {
             let (w, h) = (img.width(), img.height());
@@ -151,7 +151,7 @@ fn apply_processing(img: image::DynamicImage, settings: &ImageSettings) -> image
     }
 }
 
-fn compress_jpeg(
+pub fn compress_jpeg(
     img: &image::DynamicImage,
     output_path: &Path,
     settings: &ImageSettings,
@@ -175,7 +175,7 @@ fn compress_jpeg(
     Ok(buffer.len() as u64)
 }
 
-fn compress_png(
+pub fn compress_png(
     img: &image::DynamicImage,
     output_path: &Path,
     settings: &ImageSettings,
@@ -200,7 +200,7 @@ fn compress_png(
     Ok(output.len() as u64)
 }
 
-fn compress_webp(
+pub fn compress_webp(
     img: &image::DynamicImage,
     output_path: &Path,
     settings: &ImageSettings,
@@ -220,7 +220,7 @@ fn compress_webp(
     Ok(bytes.len() as u64)
 }
 
-fn compress_gif(
+pub fn compress_gif(
     img: &image::DynamicImage,
     output_path: &Path,
     _settings: &ImageSettings,
@@ -232,7 +232,7 @@ fn compress_gif(
     Ok(output_path.metadata()?.len())
 }
 
-fn compress_tiff(
+pub fn compress_tiff(
     img: &image::DynamicImage,
     output_path: &Path,
     _settings: &ImageSettings,
@@ -244,7 +244,7 @@ fn compress_tiff(
     Ok(output_path.metadata()?.len())
 }
 
-fn compress_bmp(
+pub fn compress_bmp(
     img: &image::DynamicImage,
     output_path: &Path,
     _settings: &ImageSettings,
@@ -256,7 +256,7 @@ fn compress_bmp(
     Ok(output_path.metadata()?.len())
 }
 
-fn compress_tga(
+pub fn compress_tga(
     img: &image::DynamicImage,
     output_path: &Path,
     _settings: &ImageSettings,
@@ -266,4 +266,44 @@ fn compress_tga(
         image::ImageFormat::Tga,
     )?;
     Ok(output_path.metadata()?.len())
+}
+
+#[allow(dead_code)]
+pub fn compress_image_to_path(
+    input_path: &Path,
+    output_path: &Path,
+    format: OutputFormat,
+    quality: u8,
+    webp_lossless: bool,
+) -> Result<()> {
+    let img = image::open(input_path).context("Failed to open image")?;
+    let settings = ImageSettings {
+        output_format: format,
+        quality,
+        color_space: ColorSpace::Rgb,
+        remove_exif: true,
+        progressive: false,
+        png_compression: 6,
+        webp_lossless,
+        max_width: None,
+        max_height: None,
+        overwrite: false,
+        backup: false,
+        output_directory: None,
+    };
+
+    ensure_dir_exists(output_path)?;
+
+    match format {
+        OutputFormat::Jpeg => compress_jpeg(&img, output_path, &settings)?,
+        OutputFormat::Png => compress_png(&img, output_path, &settings)?,
+        OutputFormat::Webp => compress_webp(&img, output_path, &settings)?,
+        OutputFormat::Gif => compress_gif(&img, output_path, &settings)?,
+        OutputFormat::Tiff => compress_tiff(&img, output_path, &settings)?,
+        OutputFormat::Bmp => compress_bmp(&img, output_path, &settings)?,
+        OutputFormat::Tga => compress_tga(&img, output_path, &settings)?,
+        OutputFormat::Same => anyhow::bail!("Cannot use OutputFormat::Same for compression"),
+    };
+
+    Ok(())
 }

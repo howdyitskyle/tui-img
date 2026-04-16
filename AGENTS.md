@@ -5,7 +5,7 @@
 cargo build     # Build
 cargo run       # Run
 cargo check     # Type-check
-cargo test      # Run 66 tests
+cargo test      # Run 61 tests (56 unit + 5 integration)
 cargo clippy    # Lint
 ```
 
@@ -13,6 +13,7 @@ cargo clippy    # Lint
 ```
 src/
 ├── main.rs        # Entry point, App struct, event loop
+├── lib.rs         # Library interface for integration tests
 ├── models.rs      # Data structures
 ├── cache.rs       # Metadata/EXIF caching
 ├── compression.rs # Image encoding
@@ -36,11 +37,13 @@ src/
 - File list auto-refreshes after compression when output dir = Same as source
 - Image Settings panel visible when focused (not just when file selected)
 - Image Settings navigation skips irrelevant options based on format:
-  - JPEG: Format → Quality → Color → EXIF → MaxWidth...
-  - WebP: Format → WebP (Lossy/Lossless) → Quality (only if Lossy) → Color...
-  - PNG: Format → Quality → Color → EXIF → Progressive → PNG Comp → MaxWidth...
-  - Other (GIF/TIFF/BMP/TGA/Same): Format → Quality (if source jpg/webp) → Color → EXIF → MaxWidth...
+  - JPEG: Format → Quality → Color → EXIF → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
+  - WebP: Format → WebP (Lossy/Lossless) → Quality (only if Lossy) → Color → EXIF → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
+  - PNG: Format → Quality → Color → EXIF → Progressive → PNG Comp → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
+  - Other (GIF/TIFF/BMP/TGA/Same): Format → Color → EXIF → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
 
 ## Testing
-- No integration tests; all 66 unit tests run via `cargo test`
-- No CI configured
+- 61 tests run via `cargo test` (56 unit + 5 integration)
+- Integration tests verify JPEG/PNG/WebP compression and format conversion
+- CI configured via `.github/workflows/ci.yml`
+  - Runs tests and clippy on push/PR to main/master

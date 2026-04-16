@@ -1,5 +1,6 @@
-use crate::models::{bytes_to_human, truncate_str, ColorSpace, ImageFile, OutputFormat};
-use crate::path_to_tilde;
+use crate::models::{
+    bytes_to_human, path_to_tilde, truncate_str, ColorSpace, ImageFile, OutputFormat,
+};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style, Stylize},
@@ -85,48 +86,54 @@ pub fn render_file_list(f: &mut Frame, area: Rect, app: &mut crate::App) {
         .split(inner);
 
     let avail_width = list_chunks[0].width as usize;
-    let spacer_len = 2;
-    let min_name_width = 20;
-    let min_dims_width = 10;
-    let min_mp_width = 6;
-    let min_size_width = 7;
-    let min_color_width = 5;
-    let min_exif_width = 15;
-    let min_ext_width = 4;
 
-    let min_total = min_name_width
-        + min_dims_width
+    let min_dims_width = 10;
+    let min_mp_width = 5;
+    let min_size_width = 8;
+    let min_color_width = 5;
+    let min_exif_width = 12;
+    let min_type_width = 4;
+    let spacer_len = 2;
+    let num_spacers = 6;
+    let icon_space = 3;
+
+    let fixed_cols_width = min_dims_width
         + min_mp_width
         + min_size_width
         + min_color_width
         + min_exif_width
-        + min_ext_width
-        + (7 * spacer_len);
-    let extra = avail_width.saturating_sub(min_total);
+        + min_type_width;
+    let total_spacers = (num_spacers * spacer_len) + icon_space;
+    let min_total = fixed_cols_width + total_spacers;
 
-    let name_width = min_name_width + (extra * 4 / 10);
-    let exif_width = min_exif_width + (extra * 3 / 10);
-    let dims_width = min_dims_width;
-    let mp_width = min_mp_width;
-    let size_width = min_size_width;
-    let color_width = min_color_width;
-    let ext_width = min_ext_width;
+    let name_width = if avail_width > min_total {
+        avail_width - min_total
+    } else {
+        20
+    };
+
+    let pos_dims = icon_space + name_width + spacer_len;
+    let pos_mp = pos_dims + min_dims_width + spacer_len;
+    let pos_size = pos_mp + min_mp_width + spacer_len;
+    let pos_color = pos_size + min_size_width + spacer_len;
+    let pos_exif = pos_color + min_color_width + spacer_len;
+    let _pos_type = pos_exif + min_exif_width + spacer_len;
 
     let header = Line::from(vec![
         Span::from("   "),
         Span::from(format!("{:<width$}", "NAME", width = name_width)),
         Span::from("  "),
-        Span::from(format!("{:>width$}", "DIM", width = dims_width)),
+        Span::from(format!("{:>width$}", "DIM", width = min_dims_width)),
         Span::from("  "),
-        Span::from(format!("{:^width$}", "MP", width = mp_width)),
+        Span::from(format!("{:>width$}", "MP", width = min_mp_width)),
         Span::from("  "),
-        Span::from(format!("{:>width$}", "SIZE", width = size_width)),
+        Span::from(format!("{:>width$}", "SIZE", width = min_size_width)),
         Span::from("  "),
-        Span::from(format!("{:^width$}", "COLOR", width = color_width)),
+        Span::from(format!("{:>width$}", "COLOR", width = min_color_width)),
         Span::from("  "),
-        Span::from(format!("{:<width$}", "EXIF", width = exif_width)),
+        Span::from(format!("{:<width$}", "EXIF", width = min_exif_width)),
         Span::from("  "),
-        Span::from(format!("{:^width$}", "TYPE", width = ext_width)),
+        Span::from(format!("{:>width$}", "TYPE", width = min_type_width)),
     ])
     .style(Style::new().dark_gray().bold());
 
@@ -173,29 +180,22 @@ pub fn render_file_list(f: &mut Frame, area: Rect, app: &mut crate::App) {
                     Span::from(format!("{}  ", icon)),
                     Span::from(format!("{:<width$}", display_name, width = name_width)),
                     Span::from("  "),
-                    Span::from(format!("{:>width$}", "", width = dims_width)),
+                    Span::from(format!("{:>width$}", "", width = min_dims_width)),
                     Span::from("  "),
-                    Span::from(format!("{:>width$}", "", width = mp_width)),
+                    Span::from(format!("{:>width$}", "", width = min_mp_width)),
                     Span::from("  "),
-                    Span::from(format!("{:>width$}", "", width = size_width)),
+                    Span::from(format!("{:>width$}", "", width = min_size_width)),
                     Span::from("  "),
-                    Span::from(format!("{:>width$}", "", width = color_width)),
+                    Span::from(format!("{:>width$}", "", width = min_color_width)),
                     Span::from("  "),
-                    Span::from(format!("{:<width$}", "", width = exif_width)),
+                    Span::from(format!("{:<width$}", "", width = min_exif_width)),
                     Span::from("  "),
-                    Span::from(format!("{:>width$}", "", width = ext_width)),
+                    Span::from(format!("{:>width$}", "", width = min_type_width)),
                 ])
                 .style(base_style);
                 ListItem::new(line)
             } else {
                 let icon = " ";
-                let name = truncate_str(&file.name, name_width);
-                let queue = if file.queued { "[Q]" } else { "" };
-
-                let ext = file
-                    .extension()
-                    .unwrap_or_else(|| "".to_string())
-                    .to_uppercase();
 
                 let (dims, mp) = file
                     .dimensions
@@ -215,6 +215,15 @@ pub fn render_file_list(f: &mut Frame, area: Rect, app: &mut crate::App) {
                     .filter(|c| !c.is_empty())
                     .unwrap_or_else(|| "—".to_string());
 
+                let ext = file
+                    .extension()
+                    .unwrap_or_else(|| "".to_string())
+                    .to_uppercase();
+
+                let queue = if file.queued { "[Q]" } else { "" };
+                let name = truncate_str(&file.name, name_width.saturating_sub(queue.len()));
+                let display_name = format!("{}{}", name, queue);
+
                 let info_style = if selected {
                     Style::new().black()
                 } else {
@@ -223,23 +232,24 @@ pub fn render_file_list(f: &mut Frame, area: Rect, app: &mut crate::App) {
 
                 let line = Line::from(vec![
                     Span::from(format!("{}  ", icon)),
-                    Span::from(format!(
-                        "{:<width$}",
-                        format!("{}{}", name, queue),
-                        width = name_width
-                    )),
+                    Span::from(format!("{:<width$}", display_name, width = name_width)),
                     Span::from("  "),
-                    Span::from(format!("{:>width$}", dims, width = dims_width)).style(info_style),
+                    Span::from(format!("{:>width$}", dims, width = min_dims_width))
+                        .style(info_style),
                     Span::from("  "),
-                    Span::from(format!("{:>width$}", mp, width = mp_width)).style(info_style),
+                    Span::from(format!("{:>width$}", mp, width = min_mp_width)).style(info_style),
                     Span::from("  "),
-                    Span::from(format!("{:>width$}", size, width = size_width)).style(info_style),
+                    Span::from(format!("{:>width$}", size, width = min_size_width))
+                        .style(info_style),
                     Span::from("  "),
-                    Span::from(format!("{:>width$}", color, width = color_width)).style(info_style),
+                    Span::from(format!("{:>width$}", color, width = min_color_width))
+                        .style(info_style),
                     Span::from("  "),
-                    Span::from(format!("{:<width$}", camera, width = exif_width)).style(info_style),
+                    Span::from(format!("{:<width$}", camera, width = min_exif_width))
+                        .style(info_style),
                     Span::from("  "),
-                    Span::from(format!("{:>width$}", ext, width = ext_width)).style(info_style),
+                    Span::from(format!("{:>width$}", ext, width = min_type_width))
+                        .style(info_style),
                 ])
                 .style(base_style);
                 ListItem::new(line)
@@ -382,7 +392,6 @@ pub fn render_settings_panel(f: &mut Frame, area: Rect, app: &crate::App) {
     let is_p = is_settings_focused && app.setting_option == crate::SettingOption::Progressive;
     let is_mw = is_settings_focused && app.setting_option == crate::SettingOption::MaxWidth;
     let is_mh = is_settings_focused && app.setting_option == crate::SettingOption::MaxHeight;
-    let is_lar = is_settings_focused && app.setting_option == crate::SettingOption::LockAspectRatio;
     let is_pc = is_settings_focused && app.setting_option == crate::SettingOption::PngCompress;
     let is_wl = is_settings_focused && app.setting_option == crate::SettingOption::WebpLossless;
     let is_ow = is_settings_focused && app.setting_option == crate::SettingOption::Overwrite;
@@ -425,16 +434,6 @@ pub fn render_settings_panel(f: &mut Frame, area: Rect, app: &crate::App) {
             .unwrap_or_else(|| "None".to_string())
     };
 
-    let aspect_lock = file
-        .map(|f| {
-            if f.settings.lock_aspect_ratio {
-                "Yes"
-            } else {
-                "No"
-            }
-        })
-        .unwrap_or("No");
-
     let mut settings_lines = vec![];
 
     settings_lines.push(separator());
@@ -457,7 +456,7 @@ pub fn render_settings_panel(f: &mut Frame, area: Rect, app: &crate::App) {
     }
 
     let show_quality = match app.global_output_format {
-        None | Some(OutputFormat::Jpeg) => true,
+        None | Some(OutputFormat::Jpeg) | Some(OutputFormat::Png) => true,
         Some(OutputFormat::Webp) => app
             .selected_file()
             .map(|f| !f.settings.webp_lossless)
@@ -526,12 +525,6 @@ pub fn render_settings_panel(f: &mut Frame, area: Rect, app: &crate::App) {
         "Max Height".into(),
         max_height.clone(),
         is_mh,
-        is_settings_focused,
-    ));
-    settings_lines.push(opt_no_hint(
-        "Aspect Lock".into(),
-        aspect_lock.into(),
-        is_lar,
         is_settings_focused,
     ));
     settings_lines.push(separator());
