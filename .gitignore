@@ -1,4 +1,22 @@
+# Build output
 target/
+
+# IDE
+.idea/
+.vscode/
+
+# Environment
+.env
+*.env
+
+# Logs
+*.log
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Editor
 *.swp
 *.swo
+*.bak
