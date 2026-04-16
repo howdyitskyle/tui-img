@@ -13,7 +13,7 @@ crossterm = "0.27"
 anyhow = "1.0"
 image = { version = "0.25", features = ["jpeg", "png", "webp", "gif", "tiff", "bmp", "tga"] }
 kamadak-exif = "0.5"
-oxipng = "4"
+oxipng = "9"
 webp = "0.3"
 walkdir = "2.4"
 rayon = "1.10"

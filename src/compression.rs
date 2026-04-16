@@ -1,6 +1,7 @@
 use crate::cache::get_unique_path;
 use crate::models::{ColorSpace, ImageFile, ImageSettings, OutputFormat};
 use anyhow::{Context, Result};
+use oxipng::Interlacing;
 use std::fs::{self, File};
 use std::io::Write as IoWrite;
 use std::path::Path;
@@ -190,7 +191,11 @@ pub fn compress_png(
     if settings.png_compression >= 8 {
         options = oxipng::Options::max_compression();
     }
-    options.interlace = if settings.progressive { Some(1) } else { None };
+    options.interlace = if settings.progressive {
+        Some(Interlacing::Adam7)
+    } else {
+        Some(Interlacing::None)
+    };
 
     let output = oxipng::optimize_from_memory(&buffer, &options)?;
 
