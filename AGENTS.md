@@ -23,10 +23,17 @@ src/
 ## Key Dependencies
 - `ratatui 0.26` - TUI framework
 - `image 0.25` - Image encoding with jpeg/png/webp/gif/tiff/bmp/tga features
-- `oxipng 4` - PNG optimization
+- `oxipng 9` - PNG optimization
 - `webp 0.3` - WebP encoding
 - `kamadak-exif 0.5` - EXIF metadata
 - `rayon 1.10` - Parallel processing
+
+## Release
+- **Version**: 1.0.0 (published to crates.io)
+- **Release workflow**: `.github/workflows/release.yml`
+  - Triggers on version tags (e.g., `v1.0.0`)
+  - Builds binaries for Linux, macOS, Windows
+  - Publishes to crates.io
 
 ## Quirks
 - Release build uses `panic = "abort"` (no unwinding)
