@@ -17,5 +17,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Build release
         run: cargo build --release
-      - name: Publish to crates.io
-        run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
+      - name: Login to crates.io
+        run: echo "$CARGO_REGISTRY_TOKEN" > $HOME/.cargo/credentials && cargo publish --allow-dirty
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
