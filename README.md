@@ -29,21 +29,22 @@ A powerful terminal-based image batch compression and conversion tool built with
 
 ## Installation
 
+### From crates.io (Recommended)
+
+```bash
+cargo install tui-img
+```
+
 ### From Source
 
 ```bash
-# Clone the repository
 git clone https://github.com/howdyitskyle/tui-img.git
 cd tui-img
-
-# Build release version
 cargo build --release
-
-# Run
 ./target/release/tui-img
 ```
 
-### Prerequisites
+### Prerequisites (for source build)
 
 - Rust 1.70 or later
 - Cargo (comes with Rust)
