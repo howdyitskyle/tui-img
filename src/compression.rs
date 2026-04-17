@@ -93,6 +93,8 @@ pub fn compress_image(
         OutputFormat::Tiff => compress_tiff(&processed, &final_output_path, &file.settings),
         OutputFormat::Bmp => compress_bmp(&processed, &final_output_path, &file.settings),
         OutputFormat::Tga => compress_tga(&processed, &final_output_path, &file.settings),
+        #[cfg(feature = "avif")]
+        OutputFormat::Avif => compress_avif(&processed, &final_output_path, &file.settings),
     }?;
 
     let output_filename = final_output_path
@@ -273,6 +275,29 @@ pub fn compress_tga(
     Ok(output_path.metadata()?.len())
 }
 
+#[cfg(feature = "avif")]
+pub fn compress_avif(
+    img: &image::DynamicImage,
+    output_path: &Path,
+    settings: &ImageSettings,
+) -> Result<u64> {
+    use imgref::ImgRef;
+    use ravif::Encoder;
+    use rgb::RGBA8;
+
+    let rgba = img.to_rgba8();
+    let img_ref = ImgRef::new(rgba.as_raw(), rgba.width(), rgba.height());
+
+    let quality = settings.quality as f32;
+    let encoder = Encoder::from_rgba(img_ref, quality);
+    let (avif_bytes, _) = encoder.encode();
+
+    let mut file = File::create(output_path)?;
+    file.write_all(&avif_bytes)?;
+
+    Ok(avif_bytes.len() as u64)
+}
+
 #[allow(dead_code)]
 pub fn compress_image_to_path(
     input_path: &Path,
@@ -307,6 +332,8 @@ pub fn compress_image_to_path(
         OutputFormat::Tiff => compress_tiff(&img, output_path, &settings)?,
         OutputFormat::Bmp => compress_bmp(&img, output_path, &settings)?,
         OutputFormat::Tga => compress_tga(&img, output_path, &settings)?,
+        #[cfg(feature = "avif")]
+        OutputFormat::Avif => compress_avif(&img, output_path, &settings)?,
         OutputFormat::Same => anyhow::bail!("Cannot use OutputFormat::Same for compression"),
     };
 

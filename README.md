@@ -26,9 +26,9 @@ A powerful terminal-based image batch compression and conversion tool built with
 
 ## Supported Formats
 
-- **Input**: JPEG, PNG, WebP, GIF, TIFF, BMP, TGA
-- **Output**: JPEG, PNG, WebP, GIF, TIFF, BMP, TGA (or keep original format)
-- **AVIF**: Available with `--features avif` (requires NASM for compilation)
+- **Input**: JPEG, PNG, WebP, GIF, TIFF, BMP, TGA, AVIF (with `--features avif`)
+- **Output**: JPEG, PNG, WebP, GIF, TIFF, BMP, TGA, AVIF (or keep original format)
+- **AVIF**: Enable with `cargo install tui-img --features avif` (requires NASM: `sudo apt install nasm` or `brew install nasm`)
 
 ## Installation
 

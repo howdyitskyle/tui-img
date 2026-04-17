@@ -962,6 +962,8 @@ fn handle_input(
                         Some(OutputFormat::Tiff) => Some(OutputFormat::Gif),
                         Some(OutputFormat::Bmp) => Some(OutputFormat::Tiff),
                         Some(OutputFormat::Tga) => Some(OutputFormat::Bmp),
+                        #[cfg(feature = "avif")]
+                        Some(OutputFormat::Avif) => Some(OutputFormat::Tga),
                     };
                 }
                 SettingOption::Progressive => {
@@ -1051,6 +1053,9 @@ fn handle_input(
                         Some(OutputFormat::Gif) => Some(OutputFormat::Tiff),
                         Some(OutputFormat::Tiff) => Some(OutputFormat::Bmp),
                         Some(OutputFormat::Bmp) => Some(OutputFormat::Tga),
+                        #[cfg(feature = "avif")]
+                        Some(OutputFormat::Tga) => Some(OutputFormat::Avif),
+                        #[cfg(not(feature = "avif"))]
                         Some(OutputFormat::Tga) => None,
                     };
                 }

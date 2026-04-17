@@ -81,6 +81,8 @@ pub enum OutputFormat {
     Tiff,
     Bmp,
     Tga,
+    #[cfg(feature = "avif")]
+    Avif,
 }
 
 impl OutputFormat {
@@ -94,6 +96,8 @@ impl OutputFormat {
             OutputFormat::Tiff => "TIFF",
             OutputFormat::Bmp => "BMP",
             OutputFormat::Tga => "TGA",
+            #[cfg(feature = "avif")]
+            OutputFormat::Avif => "AVIF",
         }
     }
 
@@ -107,6 +111,17 @@ impl OutputFormat {
             OutputFormat::Tiff => "tiff",
             OutputFormat::Bmp => "bmp",
             OutputFormat::Tga => "tga",
+            #[cfg(feature = "avif")]
+            OutputFormat::Avif => "avif",
+        }
+    }
+
+    pub fn supports_quality(&self) -> bool {
+        match self {
+            OutputFormat::Jpeg | OutputFormat::Webp | OutputFormat::Tiff => true,
+            #[cfg(feature = "avif")]
+            OutputFormat::Avif => true,
+            _ => false,
         }
     }
 
@@ -119,15 +134,10 @@ impl OutputFormat {
             "tiff" | "tif" => Some(OutputFormat::Tiff),
             "bmp" => Some(OutputFormat::Bmp),
             "tga" => Some(OutputFormat::Tga),
+            #[cfg(feature = "avif")]
+            "avif" => Some(OutputFormat::Avif),
             _ => None,
         }
-    }
-
-    pub fn supports_quality(&self) -> bool {
-        matches!(
-            self,
-            OutputFormat::Jpeg | OutputFormat::Webp | OutputFormat::Tiff
-        )
     }
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "tui-img"
-version = "1.0.4"
+version = "1.0.5"
 authors = ["Kyle Greenan <kyle@howdyitskyle.com>"]
 edition = "2021"
 rust-version = "1.70"
@@ -19,14 +19,8 @@ webp = "0.3"
 walkdir = "2.4"
 rayon = "1.10"
 memmap2 = "0.9"
-
-[profile.release]
-strip = true
-lto = true
-codegen-units = 1
-opt-level = "z"
-panic = "abort"
+ravif = { version = "0.13", optional = true }
 
 [features]
 default = []
-avif = []
+avif = ["image/avif", "dep:ravif"]
