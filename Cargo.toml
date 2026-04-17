@@ -1,6 +1,6 @@
 [package]
 name = "tui-img"
-version = "1.0.3"
+version = "1.0.4"
 authors = ["Kyle Greenan <kyle@howdyitskyle.com>"]
 edition = "2021"
 rust-version = "1.70"

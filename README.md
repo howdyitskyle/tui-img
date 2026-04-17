@@ -3,8 +3,11 @@
 
 A powerful terminal-based image batch compression and conversion tool built with Rust.
 
-![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+[![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![crates.io](https://img.shields.io/crates/v/tui-img)](https://crates.io/crates/tui-img)
+[![Build Status](https://github.com/howdyitskyle/tui-img/actions/workflows/ci.yml/badge.svg)](https://github.com/howdyitskyle/tui-img/actions)
+[![Downloads](https://img.shields.io/crates/d/tui-img)](https://crates.io/crates/tui-img)
 
 ![screenshot](https://raw.githubusercontent.com/howdyitskyle/tui-img/main/screenshots/screenshot.png)
 
