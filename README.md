@@ -155,4 +155,11 @@ Built with:
 - [image](https://github.com/image-rs/image) - Image processing
 - [oxipng](https://github.com/shssoichiro/oxipng) - PNG optimization
 - [webp](https://github.com/nickg/webp) - WebP encoding
+- [crossterm](https://github.com/crossterm-rs/crossterm) - Terminal backend
+- [kamadak-exif](https://github.com/kamadak/exif-rs) - EXIF metadata
+- [rayon](https://github.com/rayon-rs/rayon) - Parallel processing
+- [walkdir](https://github.com/BurntSushi/walkdir) - Directory traversal
+- [memmap2](https://github.com/RazrFalcon/memmap2-rs) - Memory-mapped file I/O
+- [ravif](https://github.com/kornelski/ravif) - AVIF encoding (feature-gated)
+- [anyhow](https://github.com/dtolnay/anyhow) - Error handling
 - [rayon](https://github.com/rayon-rs/rayon) - Parallel processing
