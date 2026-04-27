@@ -29,7 +29,7 @@ src/
 - `rayon 1.10` - Parallel processing
 
 ## Release
-- **Version**: 1.0.5 (published to crates.io)
+- **Version**: 1.0.6 (published to crates.io)
 - **Release workflow**: `.github/workflows/release.yml`
   - Triggers on version tags (e.g., `v1.0.5`)
   - Builds binaries for Linux
