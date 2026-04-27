@@ -5,7 +5,7 @@
 cargo build     # Build
 cargo run       # Run
 cargo check     # Type-check
-cargo test      # Run 61 tests (56 unit + 5 integration)
+cargo test      # Run 65 tests (56 unit + 9 integration)
 cargo clippy    # Lint
 ```
 
@@ -52,7 +52,14 @@ src/
   - Other (GIF/TIFF/BMP/TGA/Same): Format → Color → EXIF → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
 
 ## Testing
-- 61 tests run via `cargo test` (56 unit + 5 integration)
-- Integration tests verify JPEG/PNG/WebP compression and format conversion
+- 65 tests run via `cargo test` (56 unit + 9 integration)
+- Integration tests verify JPEG/PNG/WebP/GIF/TIFF/BMP/TGA/AVIF compression and format conversion
+- AVIF tests require `--features avif` and NASM installed
 - CI configured via `.github/workflows/ci.yml`
   - Runs tests and clippy on push/PR to main/master
+
+## Help Panel
+- Triggered by `?` key (status bar shows `[?] Help`)
+- Closes on any key press
+- Shows Navigation, Settings, and Compression keyboard shortcuts
+- Popup sized to 50% width, 50% height with padding

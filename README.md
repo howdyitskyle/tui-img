@@ -14,7 +14,7 @@ A powerful terminal-based image batch compression and conversion tool built with
 ## Features
 
 - **Batch Compression** - Compress multiple images at once with configurable settings
-- **Format Conversion** - Convert between JPEG, PNG, WebP, GIF, TIFF, BMP, and TGA formats
+- **Format Conversion** - Convert between JPEG, PNG, WebP, GIF, TIFF, BMP, TGA, and AVIF formats
 - **EXIF Management** - Keep or remove image metadata
 - **Resize Images** - Set maximum width/height with Lanczos3 resampling
 - **Virtual Scrolling** - Handle directories with thousands of files
@@ -23,6 +23,7 @@ A powerful terminal-based image batch compression and conversion tool built with
 - **Auto Unique Filenames** - Creates `file_2.ext` when filenames would conflict
 - **Auto Directory Creation** - Output directories are created automatically if they don't exist
 - **Smart Settings Navigation** - Arrow keys in Image Settings panel automatically skip irrelevant options based on output format
+- **Help Panel** - Press `?` to view keyboard shortcuts and usage guide
 
 ## Supported Formats
 
@@ -65,6 +66,7 @@ cargo build --release
 | `Tab` | Switch between Files, Settings, and Output columns |
 | `PgUp` / `PgDown` | Page up/down in file list |
 | `Home` / `End` | Jump to first/last file |
+| `?` | Toggle help panel |
 | `q` | Quit |
 
 ### Settings
@@ -98,6 +100,7 @@ Navigate to the Settings column and use:
 |-----|--------|
 | `c` | Compress queued files |
 | `C` | Clear queue |
+| `?` | Toggle help panel |
 | `q` | Quit |
 
 ## Configuration

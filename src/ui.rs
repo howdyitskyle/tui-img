@@ -5,14 +5,14 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Padding, Paragraph},
+    widgets::{Block, Borders, List, ListItem, Padding, Paragraph, Wrap},
     Frame,
 };
 
 pub fn ui(app: &mut crate::App, f: &mut Frame) {
     let vertical = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(2)])
+        .constraints([Constraint::Min(0), Constraint::Length(1)])
         .split(f.size());
 
     render_main_content(f, vertical[0], app);
@@ -22,6 +22,10 @@ pub fn ui(app: &mut crate::App, f: &mut Frame) {
         render_popup(f, f.size(), "Error", msg, Color::Red);
     } else if let Some(msg) = &app.success_message {
         render_popup(f, f.size(), "Success", msg, Color::Green);
+    }
+
+    if app.show_help {
+        render_help_panel(f, f.size());
     }
 }
 
@@ -788,20 +792,8 @@ pub fn create_quality_slider(quality: u8, width: usize) -> String {
 }
 
 pub fn render_status_bar(f: &mut Frame, area: Rect, app: &mut crate::App) {
-    let cache_key = app.compressing;
-    let spans = if let Some(ref cached) = app.status_spans_cache {
-        if cache_key {
-            cached.clone()
-        } else {
-            app.status_spans_cache
-                .clone()
-                .unwrap_or_else(|| build_status_spans(false))
-        }
-    } else {
-        let new_spans = build_status_spans(cache_key);
-        app.status_spans_cache = Some(new_spans.clone());
-        new_spans
-    };
+    let compressing = app.compressing;
+    let spans = build_status_spans(compressing);
 
     let paragraph = Paragraph::new(Line::from(spans))
         .style(Style::new().dark_gray())
@@ -817,22 +809,23 @@ fn build_status_spans(compressing: bool) -> Vec<Span<'static>> {
     } else {
         vec![
             Span::from("[↑↓]").cyan(),
-            Span::raw(" Nav   "),
-            Span::from("[Space]").cyan(),
-            Span::raw(" Queue   "),
-            Span::from("[Enter]").cyan(),
-            Span::raw(" Open Dir   "),
+            Span::raw("Nav "),
+            Span::from("[Spc]").cyan(),
+            Span::raw("Que "),
+            Span::from("[Ent]").cyan(),
+            Span::raw("Dir "),
             Span::from("[←→]").cyan(),
-            Span::raw(" Change   "),
+            Span::raw("Chg "),
             Span::from("[Tab]").cyan(),
-            Span::raw(" Switch Panel   "),
-            Span::raw("│   "),
+            Span::raw("Sw "),
             Span::from("[c]").cyan(),
-            Span::raw(" Compress   "),
+            Span::raw("Cmp "),
             Span::from("[C]").cyan(),
-            Span::raw(" Clear   "),
+            Span::raw("Clr "),
+            Span::from("[?]").cyan(),
+            Span::raw("Hlp "),
             Span::from("[q]").cyan(),
-            Span::raw(" Quit"),
+            Span::raw("Q"),
         ]
     }
 }
@@ -865,4 +858,115 @@ pub fn render_popup(f: &mut Frame, area: Rect, title: &str, message: &str, color
         .style(Style::new().black())
         .centered();
     f.render_widget(para, inner);
+}
+
+pub fn render_help_panel(f: &mut Frame, area: Rect) {
+    let help_text = vec![
+        Line::from(vec![Span::styled("Navigation:", Style::new().bold())]),
+        Line::from(vec![
+            Span::raw("  ↑/↓ or j/k"),
+            Span::styled("  - ", Style::new().dark_gray()),
+            Span::raw("Navigate file list"),
+        ]),
+        Line::from(vec![
+            Span::raw("  Enter     "),
+            Span::styled("  - ", Style::new().dark_gray()),
+            Span::raw("Open directory"),
+        ]),
+        Line::from(vec![
+            Span::raw("  Backspace"),
+            Span::styled("  - ", Style::new().dark_gray()),
+            Span::raw("Go up one directory"),
+        ]),
+        Line::from(vec![
+            Span::raw("  Space    "),
+            Span::styled("  - ", Style::new().dark_gray()),
+            Span::raw("Toggle file in/out of queue"),
+        ]),
+        Line::from(vec![
+            Span::raw("  Tab      "),
+            Span::styled("  - ", Style::new().dark_gray()),
+            Span::raw("Switch between Files, Settings, Output"),
+        ]),
+        Line::from(vec![
+            Span::raw("  PgUp/PgDn"),
+            Span::styled("  - ", Style::new().dark_gray()),
+            Span::raw("Page up/down in file list"),
+        ]),
+        Line::from(vec![
+            Span::raw("  Home/End "),
+            Span::styled("  - ", Style::new().dark_gray()),
+            Span::raw("Jump to first/last file"),
+        ]),
+        Line::from(""),
+        Line::from(vec![Span::styled("Settings:", Style::new().bold())]),
+        Line::from(vec![
+            Span::raw("  ←/→       "),
+            Span::styled("  - ", Style::new().dark_gray()),
+            Span::raw("Change setting value"),
+        ]),
+        Line::from(""),
+        Line::from(vec![Span::styled("Compression:", Style::new().bold())]),
+        Line::from(vec![
+            Span::raw("  c         "),
+            Span::styled("  - ", Style::new().dark_gray()),
+            Span::raw("Compress queued files"),
+        ]),
+        Line::from(vec![
+            Span::raw("  C         "),
+            Span::styled("  - ", Style::new().dark_gray()),
+            Span::raw("Clear queue"),
+        ]),
+        Line::from(vec![
+            Span::raw("  q         "),
+            Span::styled("  - ", Style::new().dark_gray()),
+            Span::raw("Quit"),
+        ]),
+        Line::from(vec![
+            Span::raw("  ?         "),
+            Span::styled("  - ", Style::new().dark_gray()),
+            Span::raw("Toggle this help"),
+        ]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "Press any key to close",
+            Style::new().yellow(),
+        )]),
+    ];
+
+    let popup_area = centered_rect(50, 50, area);
+
+    let block = Block::default()
+        .title("Help")
+        .borders(Borders::ALL)
+        .border_style(Style::new().cyan())
+        .padding(Padding::new(2, 2, 1, 1));
+
+    let paragraph = Paragraph::new(help_text)
+        .block(block)
+        .wrap(Wrap { trim: true });
+
+    // Clear behind popup
+    f.render_widget(ratatui::widgets::Clear, popup_area);
+    f.render_widget(paragraph, popup_area);
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }

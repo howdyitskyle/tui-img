@@ -103,6 +103,7 @@ pub struct App {
     pub compression_results: Vec<CompressionResult>,
     pub results_scroll: usize,
     pub status_spans_cache: Option<Vec<Span<'static>>>,
+    pub show_help: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -152,11 +153,12 @@ impl App {
             compression_results: Vec::new(),
             results_scroll: 0,
             status_spans_cache: None,
+            show_help: false,
         }
     }
 
     pub fn update_visible_rows(&mut self, terminal_height: u16) {
-        self.visible_rows = terminal_height.saturating_sub(6) as usize;
+        self.visible_rows = terminal_height.saturating_sub(5) as usize;
         self.scroll_offset = self
             .scroll_offset
             .min(self.files.len().saturating_sub(self.visible_rows));
@@ -639,6 +641,14 @@ fn handle_input(
     key: crossterm::event::KeyEvent,
     compression_tx: std::sync::Arc<std::sync::Mutex<Option<mpsc::Sender<CompressionEvent>>>>,
 ) -> bool {
+    // Close help panel on any key
+    if app.show_help {
+        if !matches!(key.code, KeyCode::Null) {
+            app.show_help = false;
+        }
+        return false;
+    }
+
     if app.compressing {
         if let KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') = key.code {
             app.cancel_compression();
@@ -751,6 +761,12 @@ fn handle_input(
     }
 
     match key.code {
+        // Handle help toggle (works from anywhere)
+        KeyCode::Char('?') => {
+            app.show_help = !app.show_help;
+            return false;
+        }
+
         KeyCode::Tab if app.show_settings => {
             app.focused_column = match app.focused_column {
                 FocusedColumn::Files => FocusedColumn::ImageSettings,
@@ -1452,7 +1468,7 @@ mod tests {
         app.files = (0..100).map(|_| ImageFile::new_parent()).collect();
 
         app.update_visible_rows(40);
-        assert_eq!(app.visible_rows, 34);
+        assert_eq!(app.visible_rows, 35);
         assert_eq!(app.scroll_offset, 0);
 
         app.scroll_offset = 50;
@@ -1461,7 +1477,7 @@ mod tests {
 
         app.scroll_offset = 80;
         app.update_visible_rows(40);
-        assert_eq!(app.scroll_offset, 66);
+        assert_eq!(app.scroll_offset, 65);
     }
 
     #[test]
@@ -2028,7 +2044,6 @@ mod tests {
                 SettingOption::Overwrite => app.setting_option = SettingOption::Backup,
                 SettingOption::Backup => app.setting_option = SettingOption::OutputDir,
                 SettingOption::OutputDir => app.setting_option = SettingOption::Format,
-                _ => break,
             }
         }
         visited
@@ -2104,7 +2119,6 @@ mod tests {
                 SettingOption::WebpLossless => app.setting_option = SettingOption::Format,
                 SettingOption::Progressive => app.setting_option = SettingOption::Exif,
                 SettingOption::PngCompress => app.setting_option = SettingOption::Progressive,
-                _ => break,
             }
         }
         visited

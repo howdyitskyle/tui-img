@@ -162,4 +162,131 @@ mod integration {
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
+
+    #[test]
+    fn test_gif_compression_produces_valid_file() {
+        let temp_dir = std::env::temp_dir().join("tui_img_test_gif");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let input_path = temp_dir.join("test_input.gif");
+        let output_path = temp_dir.join("test_output.gif");
+
+        create_rgba_test_image(&input_path, ImageFormat::Gif).unwrap();
+
+        let result = tui_img::compress_image_to_path(
+            &input_path,
+            &output_path,
+            tui_img::OutputFormat::Gif,
+            85,
+            false,
+        );
+
+        assert!(result.is_ok(), "GIF compression should succeed");
+        assert!(output_path.exists(), "Output GIF file should exist");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_tiff_compression_produces_valid_file() {
+        let temp_dir = std::env::temp_dir().join("tui_img_test_tiff");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let input_path = temp_dir.join("test_input.tiff");
+        let output_path = temp_dir.join("test_output.tiff");
+
+        create_rgba_test_image(&input_path, ImageFormat::Tiff).unwrap();
+
+        let result = tui_img::compress_image_to_path(
+            &input_path,
+            &output_path,
+            tui_img::OutputFormat::Tiff,
+            85,
+            false,
+        );
+
+        assert!(result.is_ok(), "TIFF compression should succeed");
+        assert!(output_path.exists(), "Output TIFF file should exist");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_bmp_compression_produces_valid_file() {
+        let temp_dir = std::env::temp_dir().join("tui_img_test_bmp");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let input_path = temp_dir.join("test_input.bmp");
+        let output_path = temp_dir.join("test_output.bmp");
+
+        create_rgba_test_image(&input_path, ImageFormat::Bmp).unwrap();
+
+        let result = tui_img::compress_image_to_path(
+            &input_path,
+            &output_path,
+            tui_img::OutputFormat::Bmp,
+            85,
+            false,
+        );
+
+        assert!(result.is_ok(), "BMP compression should succeed");
+        assert!(output_path.exists(), "Output BMP file should exist");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_tga_compression_produces_valid_file() {
+        let temp_dir = std::env::temp_dir().join("tui_img_test_tga");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let input_path = temp_dir.join("test_input.tga");
+        let output_path = temp_dir.join("test_output.tga");
+
+        create_rgba_test_image(&input_path, ImageFormat::Tga).unwrap();
+
+        let result = tui_img::compress_image_to_path(
+            &input_path,
+            &output_path,
+            tui_img::OutputFormat::Tga,
+            85,
+            false,
+        );
+
+        assert!(result.is_ok(), "TGA compression should succeed");
+        assert!(output_path.exists(), "Output TGA file should exist");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[cfg(feature = "avif")]
+    #[test]
+    fn test_avif_compression_produces_valid_file() {
+        let temp_dir = std::env::temp_dir().join("tui_img_test_avif");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let input_path = temp_dir.join("test_input.jpg");
+        let output_path = temp_dir.join("test_output.avif");
+
+        // AVIF works best with RGB images
+        create_rgb_test_image(&input_path, ImageFormat::Jpeg).unwrap();
+
+        let result = tui_img::compress_image_to_path(
+            &input_path,
+            &output_path,
+            tui_img::OutputFormat::Avif,
+            85,
+            false,
+        );
+
+        assert!(result.is_ok(), "AVIF compression should succeed");
+        assert!(output_path.exists(), "Output AVIF file should exist");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
 }
