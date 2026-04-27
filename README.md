@@ -65,6 +65,7 @@ cargo build --release
 | `Tab` | Switch between Files, Settings, and Output columns |
 | `PgUp` / `PgDown` | Page up/down in file list |
 | `Home` / `End` | Jump to first/last file |
+| `q` | Quit |
 
 ### Settings
 
@@ -78,8 +79,8 @@ Navigate to the Settings column and use:
 
 | Setting | Description | Values |
 |---------|-------------|--------|
-| Format | Output file format | Same, JPEG, PNG, WebP, GIF, TIFF, BMP, TGA |
-| Quality | Compression quality | 0-100 (JPEG, WebP, TIFF) |
+| Format | Output file format | Same, JPEG, PNG, WebP, GIF, TIFF, BMP, TGA, AVIF |
+| Quality | Compression quality | 0-100 (JPEG, WebP, TIFF, AVIF) |
 | Color | Color space conversion | RGB, Grayscale, RGBA |
 | EXIF | Metadata handling | Remove, Keep |
 | Progressive | PNG interlacing | Yes, No |
@@ -89,7 +90,7 @@ Navigate to the Settings column and use:
 | Max Height | Resize max height | None or pixels |
 | Output | File behavior | Overwrite, New file |
 | Backup | Create backup first | Yes, No |
-| Output Dir | Custom output directory | Path |
+| Output Dir | Custom output directory | Path (supports `~` expansion) |
 
 ### Compression
 
@@ -118,11 +119,12 @@ The application includes several performance optimizations:
 
 ```
 src/
-├── main.rs      # Entry point, App struct, event handling
-├── models.rs    # Data structures and helper functions
-├── cache.rs     # Metadata and EXIF caching
+├── main.rs        # Entry point, App struct, event handling
+├── lib.rs         # Library interface for integration tests
+├── models.rs      # Data structures and helper functions
+├── cache.rs       # Metadata and EXIF caching
 ├── compression.rs # Image compression logic
-└── ui.rs        # TUI rendering
+└── ui.rs          # TUI rendering
 ```
 
 ## Testing
