@@ -333,6 +333,8 @@ pub fn compress_image_to_path(
         backup: false,
         output_directory: None,
         extract_frames: false,
+        assemble_frames: false,
+        frame_delay: 10,
     };
 
     ensure_dir_exists(output_path)?;
@@ -530,4 +532,66 @@ fn encode_frame(img: &image::DynamicImage, path: &Path, ext: &str) -> Result<()>
         }
     }
     Ok(())
+}
+
+#[cfg(feature = "animation")]
+pub fn assemble_frames_to_path(
+    frame_paths: &[std::path::PathBuf],
+    output_dir: &Path,
+    frame_delay: u16,
+) -> Result<(u64, String)> {
+    use std::io::BufWriter;
+
+    if frame_paths.is_empty() {
+        anyhow::bail!("No frames to assemble");
+    }
+
+    let first_img =
+        image::open(&frame_paths[0]).context("Failed to open first frame for assembly")?;
+    let width = first_img.width() as u16;
+    let height = first_img.height() as u16;
+
+    let stem = frame_paths[0]
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("frame");
+    let output_name = format!("{}_animated.gif", stem);
+    let output_path = get_unique_path(&output_dir.join(&output_name));
+    ensure_dir_exists(&output_path)?;
+
+    let file = File::create(&output_path)?;
+    let mut buf_writer = BufWriter::new(file);
+    let mut encoder = gif::Encoder::new(&mut buf_writer, width, height, &[])?;
+    encoder.set_repeat(gif::Repeat::Infinite)?;
+
+    for frame_path in frame_paths {
+        let img =
+            image::open(frame_path).context("Failed to open frame for assembly")?;
+        let resized = if img.width() as u16 != width || img.height() as u16 != height {
+            img.resize_exact(
+                width as u32,
+                height as u32,
+                image::imageops::FilterType::Lanczos3,
+            )
+        } else {
+            img
+        };
+        let rgba = resized.to_rgba8();
+        let mut frame = gif::Frame::from_rgba(width, height, &mut rgba.into_raw());
+        frame.delay = frame_delay;
+        encoder.write_frame(&frame)?;
+    }
+
+    drop(encoder);
+    buf_writer.flush()?;
+    drop(buf_writer);
+    let meta = std::fs::metadata(&output_path)?;
+    let file_size = meta.len();
+    let result_name = output_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(&output_name)
+        .to_string();
+
+    Ok((file_size, result_name))
 }

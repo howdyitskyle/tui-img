@@ -18,6 +18,7 @@ A powerful terminal-based image batch compression and conversion tool built with
 - **EXIF Management** - Keep or remove image metadata
 - **Resize Images** - Set maximum width/height with Lanczos3 resampling
 - **Animation Frame Extraction** - Extract frames from animated GIF, WebP, and APNG into separate static images (feature-gated behind `animation`)
+- **Animation Assembly** - Assemble static images into animated GIF with configurable frame delay (feature-gated behind `animation`)
 - **Virtual Scrolling** - Handle directories with thousands of files
 - **Metadata Caching** - Fast directory navigation with cached metadata
 - **Parallel Processing** - Uses rayon for parallel EXIF loading and directory scanning
@@ -105,6 +106,8 @@ Navigate to the Settings column and use:
 | Backup | Create backup first | Yes, No |
 | Output Dir | Custom output directory | Path (supports `~` expansion) |
 | Extract Frames | Extract animation frames | Yes, No (animated files only) |
+| Assemble Frames | Assemble frames into animated GIF | Yes, No (static files only) |
+| Frame Delay | Delay between frames in centiseconds | 1–100 (step 5, default 10) |
 
 ### Compression
 

@@ -405,6 +405,11 @@ pub fn render_settings_panel(f: &mut Frame, area: Rect, app: &crate::App) {
     let show_extract_frames = file.map(|f| f.is_animated).unwrap_or(false);
     let is_ef = is_settings_focused && app.setting_option == crate::SettingOption::ExtractFrames;
 
+    let show_assemble_frames = file.map(|f| !f.is_animated).unwrap_or(false);
+    let is_af = is_settings_focused && app.setting_option == crate::SettingOption::AssembleFrames;
+    let show_frame_delay = file.map(|f| f.settings.assemble_frames).unwrap_or(false);
+    let is_fd = is_settings_focused && app.setting_option == crate::SettingOption::FrameDelay;
+
     let global_format = app
         .global_output_format
         .map(|f| f.as_str())
@@ -569,6 +574,36 @@ pub fn render_settings_panel(f: &mut Frame, area: Rect, app: &crate::App) {
             "Extract Frames".into(),
             ef_val.into(),
             is_ef,
+            is_settings_focused,
+        ));
+    }
+
+    if show_assemble_frames {
+        let af_val = file
+            .map(|f| {
+                if f.settings.assemble_frames {
+                    "On"
+                } else {
+                    "Off"
+                }
+            })
+            .unwrap_or("Off");
+        settings_lines.push(opt_no_hint(
+            "Assemble Frames".into(),
+            af_val.into(),
+            is_af,
+            is_settings_focused,
+        ));
+    }
+
+    if show_frame_delay {
+        let fd_val = file
+            .map(|f| format!("{}cs", f.settings.frame_delay))
+            .unwrap_or_else(|| "10cs".to_string());
+        settings_lines.push(opt_no_hint(
+            "Frame Delay".into(),
+            fd_val,
+            is_fd,
             is_settings_focused,
         ));
     }

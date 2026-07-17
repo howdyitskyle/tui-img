@@ -34,6 +34,8 @@ pub struct ImageSettings {
     pub overwrite: bool,
     pub backup: bool,
     pub extract_frames: bool,
+    pub assemble_frames: bool,
+    pub frame_delay: u16,
 }
 
 impl Default for ImageSettings {
@@ -52,6 +54,8 @@ impl Default for ImageSettings {
             overwrite: false,
             backup: false,
             extract_frames: false,
+            assemble_frames: false,
+            frame_delay: 10,
         }
     }
 }

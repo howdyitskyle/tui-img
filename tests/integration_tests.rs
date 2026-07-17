@@ -623,5 +623,36 @@ mod integration {
 
             let _ = fs::remove_dir_all(&temp_dir);
         }
+
+        #[test]
+        fn test_assemble_frames_to_gif() {
+            let temp_dir = std::env::temp_dir().join("tui_img_test_assemble_frames");
+            let _ = fs::remove_dir_all(&temp_dir);
+            fs::create_dir_all(&temp_dir).unwrap();
+
+            let frames_dir = temp_dir.join("frames");
+            fs::create_dir_all(&frames_dir).unwrap();
+
+            let frame1 = frames_dir.join("frame_001.png");
+            let frame2 = frames_dir.join("frame_002.png");
+            let frame3 = frames_dir.join("frame_003.png");
+
+            create_rgba_test_image(&frame1, ImageFormat::Png).unwrap();
+            create_rgba_test_image(&frame2, ImageFormat::Png).unwrap();
+            create_rgba_test_image(&frame3, ImageFormat::Png).unwrap();
+
+            let frame_paths = vec![frame1, frame2, frame3];
+            let result = tui_img::assemble_frames_to_path(&frame_paths, &temp_dir, 10);
+
+            assert!(result.is_ok(), "Assembly should succeed: {:?}", result.err());
+
+            let (file_size, output_name) = result.unwrap();
+            assert!(file_size > 0, "Output file should have size > 0");
+
+            let output_path = temp_dir.join(&output_name);
+            assert!(output_path.exists(), "Output GIF should exist");
+
+            let _ = fs::remove_dir_all(&temp_dir);
+        }
     }
 }

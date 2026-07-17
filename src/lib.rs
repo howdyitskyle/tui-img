@@ -8,6 +8,8 @@ pub use compression::{
 };
 #[cfg(feature = "animation")]
 pub use compression::extract_frames_to_path;
+#[cfg(feature = "animation")]
+pub use compression::assemble_frames_to_path;
 pub use models::{
     path_to_tilde, CachedImageInfo, ColorSpace, ExifData, ImageFile, ImageSettings, OutputFormat,
 };

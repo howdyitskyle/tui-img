@@ -54,9 +54,11 @@ src/
   - AVIF: Format → Quality → Color → EXIF → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
   - Other (GIF/TIFF/BMP/TGA/Same): Format → Color → EXIF → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
   - Animated files add ExtractFrames between OutputDir and Format
+  - Static files add AssembleFrames between OutputDir and Format
+  - AssembleFrames adds FrameDelay when enabled
 
 ## Testing
-- 65 tests run via `cargo test` (56 unit + 9 integration)
+- 73 tests run via `cargo test` (56 unit + 17 integration)
 - Integration tests verify JPEG/PNG/WebP/GIF/TIFF/BMP/TGA/AVIF compression and format conversion
 - AVIF tests require `--features avif` and NASM installed
 - Animation tests require `--features animation`
