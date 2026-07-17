@@ -33,6 +33,7 @@ pub struct ImageSettings {
     pub webp_lossless: bool,
     pub overwrite: bool,
     pub backup: bool,
+    pub extract_frames: bool,
 }
 
 impl Default for ImageSettings {
@@ -50,6 +51,7 @@ impl Default for ImageSettings {
             webp_lossless: false,
             overwrite: false,
             backup: false,
+            extract_frames: false,
         }
     }
 }
@@ -209,6 +211,7 @@ pub struct ImageFile {
     pub queued: bool,
     pub selected: bool,
     pub exif_data: Option<ExifData>,
+    pub is_animated: bool,
 }
 
 impl ImageFile {
@@ -226,6 +229,7 @@ impl ImageFile {
             queued: false,
             selected: false,
             exif_data: None,
+            is_animated: false,
         }
     }
 
@@ -236,6 +240,10 @@ impl ImageFile {
         if !is_dir {
             file.dimensions = image::image_dimensions(&file.path).ok();
             file.color_type = fast_color_type(&file.path);
+            #[cfg(feature = "animation")]
+            {
+                file.is_animated = detect_animation(&file.path);
+            }
         }
 
         file
@@ -281,6 +289,7 @@ impl ImageFile {
             queued: false,
             selected: false,
             exif_data: None,
+            is_animated: false,
         }
     }
 
@@ -394,5 +403,57 @@ pub fn truncate_str(s: &str, max_len: usize) -> String {
         format!("{}...", truncated)
     } else {
         s.to_string()
+    }
+}
+
+#[cfg(feature = "animation")]
+pub fn detect_animation(path: &Path) -> bool {
+    let file = match fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return false,
+    };
+    let mmap = match unsafe { Mmap::map(&file) } {
+        Ok(m) => m,
+        Err(_) => return false,
+    };
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase());
+
+    match ext.as_deref() {
+        Some("gif") => {
+            let mut decoder = gif::DecodeOptions::new();
+            decoder.skip_frame_decoding(true);
+            decoder.set_color_output(gif::ColorOutput::RGBA);
+            let mut decoder = match decoder.read_info(io::Cursor::new(&mmap[..])) {
+                Ok(d) => d,
+                Err(_) => return false,
+            };
+            let mut count = 0u32;
+            while let Ok(Some(_)) = decoder.next_frame_info() {
+                count += 1;
+                if count > 1 {
+                    return true;
+                }
+            }
+            false
+        }
+        Some("webp") => {
+            let decoder = match image::codecs::webp::WebPDecoder::new(io::Cursor::new(&mmap[..])) {
+                    Ok(d) => d,
+                    Err(_) => return false,
+                };
+            decoder.has_animation()
+        }
+        Some("png") => {
+            let decoder =
+                match image::codecs::png::PngDecoder::new(io::Cursor::new(&mmap[..])) {
+                    Ok(d) => d,
+                    Err(_) => return false,
+                };
+            decoder.is_apng().unwrap_or(false)
+        }
+        _ => false,
     }
 }

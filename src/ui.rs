@@ -402,6 +402,9 @@ pub fn render_settings_panel(f: &mut Frame, area: Rect, app: &crate::App) {
     let is_bk = is_settings_focused && app.setting_option == crate::SettingOption::Backup;
     let is_dir = is_settings_focused && app.setting_option == crate::SettingOption::OutputDir;
 
+    let show_extract_frames = file.map(|f| f.is_animated).unwrap_or(false);
+    let is_ef = is_settings_focused && app.setting_option == crate::SettingOption::ExtractFrames;
+
     let global_format = app
         .global_output_format
         .map(|f| f.as_str())
@@ -551,6 +554,24 @@ pub fn render_settings_panel(f: &mut Frame, area: Rect, app: &crate::App) {
         is_dir,
         is_settings_focused,
     ));
+
+    if show_extract_frames {
+        let ef_val = file
+            .map(|f| {
+                if f.settings.extract_frames {
+                    "On"
+                } else {
+                    "Off"
+                }
+            })
+            .unwrap_or("Off");
+        settings_lines.push(opt_no_hint(
+            "Extract Frames".into(),
+            ef_val.into(),
+            is_ef,
+            is_settings_focused,
+        ));
+    }
 
     if app.input_mode {
         let input_line = Line::from(vec![

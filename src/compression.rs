@@ -1,6 +1,8 @@
 use crate::cache::get_unique_path;
 use crate::models::{ColorSpace, ImageFile, ImageSettings, OutputFormat};
 use anyhow::{Context, Result};
+#[cfg(feature = "animation")]
+use image::AnimationDecoder;
 use oxipng::Interlacing;
 use std::fs::{self, File};
 use std::io::Write as IoWrite;
@@ -47,6 +49,16 @@ pub fn compress_image(
     output_path: &Path,
     global_format: Option<OutputFormat>,
 ) -> Result<(u64, String)> {
+    #[cfg(feature = "animation")]
+    if file.settings.extract_frames {
+        let base_dir = file
+            .settings
+            .output_directory
+            .as_deref()
+            .unwrap_or_else(|| output_path.parent().unwrap_or(Path::new(".")));
+        return extract_frames_to_path(file, base_dir, global_format);
+    }
+
     let img = image::open(&file.path).context("Failed to open image")?;
     let processed = apply_processing(img, &file.settings);
 
@@ -320,6 +332,7 @@ pub fn compress_image_to_path(
         overwrite: false,
         backup: false,
         output_directory: None,
+        extract_frames: false,
     };
 
     ensure_dir_exists(output_path)?;
@@ -337,5 +350,184 @@ pub fn compress_image_to_path(
         OutputFormat::Same => anyhow::bail!("Cannot use OutputFormat::Same for compression"),
     };
 
+    Ok(())
+}
+
+#[cfg(feature = "animation")]
+pub fn extract_frames_to_path(
+    file: &ImageFile,
+    base_dir: &Path,
+    global_format: Option<OutputFormat>,
+) -> Result<(u64, String)> {
+    let stem = file
+        .path
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy();
+    let frames_dir = base_dir.join(format!("{}_frames", stem));
+    ensure_dir_exists(&frames_dir.join("placeholder"))?;
+
+    let target_format = global_format.unwrap_or(file.settings.output_format);
+    let ext = match target_format {
+        OutputFormat::Same => file.extension().unwrap_or_else(|| "png".to_string()),
+        _ => target_format.extension().to_string(),
+    };
+
+    let file_vec = fs::read(&file.path).context("Failed to read file for frame extraction")?;
+    let ext_lower = ext.to_lowercase();
+
+    let frame_count = match ext_lower.as_str() {
+        "gif" => extract_gif_frames(&file_vec, &frames_dir, &ext, &file.settings)?,
+        "webp" => extract_webp_frames(&file_vec, &frames_dir, &ext, &file.settings)?,
+        "png" => extract_apng_frames(&file_vec, &frames_dir, &ext, &file.settings)?,
+        _ => anyhow::bail!("Frame extraction not supported for .{}", ext),
+    };
+
+    let output_name = format!("{}/", frames_dir.display());
+    Ok((frame_count, output_name))
+}
+
+#[cfg(feature = "animation")]
+fn extract_gif_frames(
+    data: &[u8],
+    frames_dir: &Path,
+    ext: &str,
+    settings: &ImageSettings,
+) -> Result<u64> {
+    let mut decoder = gif::DecodeOptions::new();
+    decoder.set_color_output(gif::ColorOutput::RGBA);
+    let mut decoder = decoder
+        .read_info(std::io::Cursor::new(data))
+        .context("Failed to decode GIF")?;
+
+    let mut frame_idx: u32 = 0;
+    while let Some(frame) = decoder.read_next_frame().context("Failed to read GIF frame")? {
+        frame_idx += 1;
+        let rgba_img = image::RgbaImage::from_raw(
+            frame.width as u32,
+            frame.height as u32,
+            frame.buffer.to_vec(),
+        )
+        .context("Failed to create RgbaImage from GIF frame")?;
+        let dyn_img = image::DynamicImage::ImageRgba8(rgba_img);
+        let processed = apply_processing(dyn_img, settings);
+        let frame_path = frames_dir.join(format!("frame_{:03}.{}", frame_idx, ext));
+        encode_frame(&processed, &frame_path, ext)?;
+    }
+
+    Ok(frame_idx as u64)
+}
+
+#[cfg(feature = "animation")]
+fn extract_webp_frames(
+    data: &[u8],
+    frames_dir: &Path,
+    ext: &str,
+    settings: &ImageSettings,
+) -> Result<u64> {
+    let cursor = std::io::Cursor::new(data);
+    let decoder =
+        image::codecs::webp::WebPDecoder::new(cursor).context("Failed to decode WebP")?;
+    let frames: Vec<image::Frame> = decoder
+        .into_frames()
+        .collect_frames()
+        .unwrap_or_default();
+
+    if frames.is_empty() {
+        let cursor = std::io::Cursor::new(data);
+        let img =
+            image::DynamicImage::from_decoder(image::codecs::webp::WebPDecoder::new(cursor)?)
+                .context("Failed to decode WebP as static image")?;
+        let processed = apply_processing(img, settings);
+        let frame_path = frames_dir.join(format!("frame_{:03}.{}", 1, ext));
+        encode_frame(&processed, &frame_path, ext)?;
+        return Ok(1);
+    }
+
+    let total = frames.len() as u64;
+    for (i, frame) in frames.into_iter().enumerate() {
+        let rgba_buf = frame.buffer().clone();
+        let dyn_img = image::DynamicImage::ImageRgba8(rgba_buf);
+        let processed = apply_processing(dyn_img, settings);
+        let frame_path = frames_dir.join(format!("frame_{:03}.{}", i + 1, ext));
+        encode_frame(&processed, &frame_path, ext)?;
+    }
+
+    Ok(total)
+}
+
+#[cfg(feature = "animation")]
+fn extract_apng_frames(
+    data: &[u8],
+    frames_dir: &Path,
+    ext: &str,
+    settings: &ImageSettings,
+) -> Result<u64> {
+    let cursor = std::io::Cursor::new(data);
+    let decoder =
+        image::codecs::png::PngDecoder::new(cursor).context("Failed to decode PNG")?;
+
+    let frames = match decoder.apng() {
+        Ok(apng_decoder) => apng_decoder
+            .into_frames()
+            .collect_frames()
+            .unwrap_or_default(),
+        Err(_) => Vec::new(),
+    };
+
+    if frames.is_empty() {
+        let cursor = std::io::Cursor::new(data);
+        let img =
+            image::DynamicImage::from_decoder(image::codecs::png::PngDecoder::new(cursor)?)
+                .context("Failed to decode PNG as static image")?;
+        let processed = apply_processing(img, settings);
+        let frame_path = frames_dir.join(format!("frame_{:03}.{}", 1, ext));
+        encode_frame(&processed, &frame_path, ext)?;
+        return Ok(1);
+    }
+
+    let total = frames.len() as u64;
+    for (i, frame) in frames.into_iter().enumerate() {
+        let rgba_buf = frame.buffer().clone();
+        let dyn_img = image::DynamicImage::ImageRgba8(rgba_buf);
+        let processed = apply_processing(dyn_img, settings);
+        let frame_path = frames_dir.join(format!("frame_{:03}.{}", i + 1, ext));
+        encode_frame(&processed, &frame_path, ext)?;
+    }
+
+    Ok(total)
+}
+
+#[cfg(feature = "animation")]
+fn encode_frame(img: &image::DynamicImage, path: &Path, ext: &str) -> Result<()> {
+    match ext {
+        "png" => {
+            img.write_to(
+                &mut std::io::BufWriter::new(File::create(path)?),
+                image::ImageFormat::Png,
+            )?;
+        }
+        "webp" => {
+            let rgba = img.to_rgba8();
+            let encoder = webp::Encoder::from_rgba(rgba.as_raw(), rgba.width(), rgba.height());
+            let webp_data = encoder.encode_lossless();
+            let bytes: &[u8] =
+                unsafe { std::slice::from_raw_parts(webp_data.as_ptr(), webp_data.len()) };
+            let mut file = File::create(path)?;
+            file.write_all(bytes)?;
+        }
+        "gif" => {
+            img.write_to(
+                &mut std::io::BufWriter::new(File::create(path)?),
+                image::ImageFormat::Gif,
+            )?;
+        }
+        _ => {
+            img.write_to(
+                &mut std::io::BufWriter::new(File::create(path)?),
+                image::ImageFormat::Png,
+            )?;
+        }
+    }
     Ok(())
 }

@@ -51,6 +51,10 @@ fn show_progressive_setting(format: Option<OutputFormat>) -> bool {
     format == Some(OutputFormat::Png)
 }
 
+fn show_extract_frames_setting(file: Option<&ImageFile>) -> bool {
+    file.map(|f| f.is_animated).unwrap_or(false)
+}
+
 #[derive(Clone, Copy, PartialEq)]
 pub enum FocusedColumn {
     Files,
@@ -72,6 +76,7 @@ pub enum SettingOption {
     Overwrite,
     Backup,
     OutputDir,
+    ExtractFrames,
 }
 
 pub struct App {
@@ -487,6 +492,7 @@ impl App {
                     queued: false,
                     selected: false,
                     exif_data: None,
+                    is_animated: false,
                 };
 
                 match compress_image(&temp_file, &output_path, global_format) {
@@ -799,6 +805,7 @@ fn handle_input(
                 let from_quality = show_quality_setting(format, file);
                 let from_webp = show_webp_setting(format);
                 let from_progressive = show_progressive_setting(format);
+                let from_extract_frames = show_extract_frames_setting(file);
 
                 app.setting_option = match app.setting_option {
                     SettingOption::Quality => {
@@ -818,7 +825,13 @@ fn handle_input(
                         }
                     }
                     SettingOption::Exif => SettingOption::Color,
-                    SettingOption::Format => SettingOption::OutputDir,
+                    SettingOption::Format => {
+                        if from_extract_frames {
+                            SettingOption::ExtractFrames
+                        } else {
+                            SettingOption::OutputDir
+                        }
+                    }
                     SettingOption::WebpLossless => SettingOption::Format,
                     SettingOption::Progressive => SettingOption::Exif,
                     SettingOption::PngCompress => SettingOption::Progressive,
@@ -833,6 +846,7 @@ fn handle_input(
                     SettingOption::Overwrite => SettingOption::MaxHeight,
                     SettingOption::Backup => SettingOption::Overwrite,
                     SettingOption::OutputDir => SettingOption::Backup,
+                    SettingOption::ExtractFrames => SettingOption::OutputDir,
                 };
             }
         }
@@ -862,6 +876,7 @@ fn handle_input(
                 let from_quality = show_quality_setting(format, file);
                 let from_webp = show_webp_setting(format);
                 let from_progressive = show_progressive_setting(format);
+                let from_extract_frames = show_extract_frames_setting(file);
 
                 app.setting_option = match app.setting_option {
                     SettingOption::Format => {
@@ -895,7 +910,14 @@ fn handle_input(
                     SettingOption::MaxHeight => SettingOption::Overwrite,
                     SettingOption::Overwrite => SettingOption::Backup,
                     SettingOption::Backup => SettingOption::OutputDir,
-                    SettingOption::OutputDir => SettingOption::Format,
+                    SettingOption::OutputDir => {
+                        if from_extract_frames {
+                            SettingOption::ExtractFrames
+                        } else {
+                            SettingOption::Format
+                        }
+                    }
+                    SettingOption::ExtractFrames => SettingOption::Format,
                 };
             }
         }
@@ -1035,6 +1057,15 @@ fn handle_input(
                     app.input_target = SettingOption::OutputDir;
                     app.input_buffer.clear();
                 }
+                SettingOption::ExtractFrames => {
+                    let idx = app
+                        .selected_index
+                        .filter(|&i| app.files[i].is_animated);
+                    if let Some(i) = idx {
+                        app.files[i].settings.extract_frames =
+                            !app.files[i].settings.extract_frames;
+                    }
+                }
             };
         }
         KeyCode::Right if app.focused_column == FocusedColumn::ImageSettings => {
@@ -1126,6 +1157,15 @@ fn handle_input(
                     app.input_mode = true;
                     app.input_target = SettingOption::OutputDir;
                     app.input_buffer.clear();
+                }
+                SettingOption::ExtractFrames => {
+                    let idx = app
+                        .selected_index
+                        .filter(|&i| app.files[i].is_animated);
+                    if let Some(i) = idx {
+                        app.files[i].settings.extract_frames =
+                            !app.files[i].settings.extract_frames;
+                    }
                 }
             };
         }
@@ -2010,6 +2050,7 @@ mod tests {
             };
             let from_webp = format == Some(OutputFormat::Webp);
             let from_progressive = format == Some(OutputFormat::Png);
+            let from_extract_frames = show_extract_frames_setting(file);
 
             match app.setting_option {
                 SettingOption::Format => {
@@ -2043,7 +2084,14 @@ mod tests {
                 SettingOption::MaxHeight => app.setting_option = SettingOption::Overwrite,
                 SettingOption::Overwrite => app.setting_option = SettingOption::Backup,
                 SettingOption::Backup => app.setting_option = SettingOption::OutputDir,
-                SettingOption::OutputDir => app.setting_option = SettingOption::Format,
+                SettingOption::OutputDir => {
+                    app.setting_option = if from_extract_frames {
+                        SettingOption::ExtractFrames
+                    } else {
+                        SettingOption::Format
+                    }
+                }
+                SettingOption::ExtractFrames => app.setting_option = SettingOption::Format,
             }
         }
         visited
@@ -2075,6 +2123,7 @@ mod tests {
             };
             let from_webp = format == Some(OutputFormat::Webp);
             let from_progressive = format == Some(OutputFormat::Png);
+            let _from_extract_frames = show_extract_frames_setting(file);
 
             match app.setting_option {
                 SettingOption::Format => {
@@ -2119,6 +2168,7 @@ mod tests {
                 SettingOption::WebpLossless => app.setting_option = SettingOption::Format,
                 SettingOption::Progressive => app.setting_option = SettingOption::Exif,
                 SettingOption::PngCompress => app.setting_option = SettingOption::Progressive,
+                SettingOption::ExtractFrames => app.setting_option = SettingOption::OutputDir,
             }
         }
         visited

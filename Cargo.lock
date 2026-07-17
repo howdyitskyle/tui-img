@@ -1499,14 +1499,17 @@ dependencies = [
 
 [[package]]
 name = "tui-img"
-version = "1.0.5"
+version = "1.0.8"
 dependencies = [
  "anyhow",
  "crossterm",
+ "gif",
  "image",
  "kamadak-exif",
+ "libwebp-sys",
  "memmap2",
  "oxipng",
+ "png",
  "ratatui",
  "ravif",
  "rayon",

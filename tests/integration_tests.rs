@@ -289,4 +289,339 @@ mod integration {
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
+
+    #[cfg(feature = "animation")]
+    mod animation {
+        use super::*;
+        use std::fs::File;
+        use std::io::Write;
+
+        fn rgba_pixels(r: u8, g: u8, b: u8, count: usize) -> Vec<u8> {
+            let mut v = Vec::with_capacity(count * 4);
+            for _ in 0..count {
+                v.extend_from_slice(&[r, g, b, 255]);
+            }
+            v
+        }
+
+        fn create_animated_gif(path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+            let mut buf = Vec::new();
+            {
+                let mut encoder = gif::Encoder::new(&mut buf, 100, 100, &[])?;
+                let mut f1 = rgba_pixels(255, 0, 0, 100 * 100);
+                let mut f2 = rgba_pixels(0, 255, 0, 100 * 100);
+                let mut f3 = rgba_pixels(0, 0, 255, 100 * 100);
+                encoder.write_frame(&gif::Frame::from_rgba(100, 100, &mut f1))?;
+                encoder.write_frame(&gif::Frame::from_rgba(100, 100, &mut f2))?;
+                encoder.write_frame(&gif::Frame::from_rgba(100, 100, &mut f3))?;
+            }
+            let mut file = File::create(path)?;
+            file.write_all(&buf)?;
+            Ok(())
+        }
+
+        fn create_animated_webp(path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+            let rgba1 = rgba_pixels(255, 0, 0, 100 * 100);
+            let rgba2 = rgba_pixels(0, 255, 0, 100 * 100);
+            let rgba3 = rgba_pixels(0, 0, 255, 100 * 100);
+
+            let mut config: webp::WebPConfig = unsafe { std::mem::zeroed() };
+            unsafe {
+                let ok = libwebp_sys::WebPConfigInitInternal(
+                    &mut config,
+                    libwebp_sys::WebPPreset::WEBP_PRESET_DEFAULT,
+                    75.0,
+                    libwebp_sys::WEBP_ENCODER_ABI_VERSION as i32,
+                );
+                assert_ne!(ok, 0, "WebPConfigInitInternal failed");
+                config.method = 4;
+                config.pass = 10;
+            }
+            let mut encoder = webp::AnimEncoder::new(100, 100, &config);
+            encoder.add_frame(webp::AnimFrame::new(
+                &rgba1,
+                webp::PixelLayout::Rgba,
+                100,
+                100,
+                0,
+                None,
+            ));
+            encoder.add_frame(webp::AnimFrame::new(
+                &rgba2,
+                webp::PixelLayout::Rgba,
+                100,
+                100,
+                100,
+                None,
+            ));
+            encoder.add_frame(webp::AnimFrame::new(
+                &rgba3,
+                webp::PixelLayout::Rgba,
+                100,
+                100,
+                200,
+                None,
+            ));
+            let webp_data = encoder.try_encode().map_err(|e| format!("Animated WebP encode failed: {:?}", e))?;
+            let mut file = File::create(path)?;
+            file.write_all(&webp_data)?;
+            Ok(())
+        }
+
+        fn create_single_frame_gif(path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+            let mut buf = Vec::new();
+            {
+                let mut encoder = gif::Encoder::new(&mut buf, 100, 100, &[])?;
+                let mut rgba = rgba_pixels(255, 0, 0, 100 * 100);
+                encoder.write_frame(&gif::Frame::from_rgba(100, 100, &mut rgba))?;
+            }
+            let mut file = File::create(path)?;
+            file.write_all(&buf)?;
+            Ok(())
+        }
+
+        fn create_single_frame_webp(path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+            let rgba = rgba_pixels(255, 0, 0, 100 * 100);
+            let encoder = webp::Encoder::new(&rgba, webp::PixelLayout::Rgba, 100, 100);
+            let webp_data = encoder.encode_lossless();
+            let mut file = File::create(path)?;
+            file.write_all(&webp_data)?;
+            Ok(())
+        }
+
+        fn create_animated_apng(path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+            let file = File::create(path)?;
+            let w = &mut std::io::BufWriter::new(file);
+
+            let mut encoder = png::Encoder::new(w, 100, 100);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_animated(3, 0)?;
+            let mut writer = encoder.write_header()?;
+
+            for _ in 0..3 {
+                writer.set_frame_delay(1, 10)?;
+                let data = rgba_pixels(255, 0, 0, 100 * 100);
+                writer.write_image_data(&data)?;
+            }
+            writer.finish()?;
+            Ok(())
+        }
+
+        fn create_single_frame_png(path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+            let file = File::create(path)?;
+            let w = &mut std::io::BufWriter::new(file);
+
+            let mut encoder = png::Encoder::new(w, 100, 100);
+            encoder.set_color(png::ColorType::Rgba);
+            let mut writer = encoder.write_header()?;
+            let data = rgba_pixels(255, 0, 0, 100 * 100);
+            writer.write_image_data(&data)?;
+            writer.finish()?;
+            Ok(())
+        }
+
+        fn make_file(path: &std::path::Path) -> tui_img::ImageFile {
+            tui_img::ImageFile::new(path.to_path_buf())
+        }
+
+        #[test]
+        fn test_extract_frames_animated_gif() {
+            let temp_dir = std::env::temp_dir().join("tui_img_test_extract_gif");
+            let _ = fs::remove_dir_all(&temp_dir);
+            fs::create_dir_all(&temp_dir).unwrap();
+
+            let input_path = temp_dir.join("test_animated.gif");
+            create_animated_gif(&input_path).unwrap();
+
+            let file = make_file(&input_path);
+            assert!(file.is_animated, "Animated GIF should be detected as animated");
+
+            let result = tui_img::extract_frames_to_path(&file, &temp_dir, None);
+            assert!(result.is_ok(), "GIF frame extraction should succeed: {:?}", result.err());
+
+            let (_, output_name) = result.unwrap();
+            let frames_dir = temp_dir.join(output_name.trim_end_matches('/'));
+            let frames: Vec<_> = fs::read_dir(&frames_dir)
+                .unwrap()
+                .filter_map(|e| e.ok())
+                .collect();
+            assert_eq!(frames.len(), 3, "Should have 3 frames extracted");
+
+            let _ = fs::remove_dir_all(&temp_dir);
+        }
+
+        #[test]
+        fn test_extract_frames_animated_webp() {
+            let temp_dir = std::env::temp_dir().join("tui_img_test_extract_webp");
+            let _ = fs::remove_dir_all(&temp_dir);
+            fs::create_dir_all(&temp_dir).unwrap();
+
+            let input_path = temp_dir.join("test_animated.webp");
+            create_animated_webp(&input_path).unwrap();
+
+            let file = make_file(&input_path);
+            assert!(file.is_animated, "Animated WebP should be detected as animated");
+
+            let result = tui_img::extract_frames_to_path(&file, &temp_dir, None);
+            assert!(result.is_ok(), "WebP frame extraction should succeed: {:?}", result.err());
+
+            let (_, output_name) = result.unwrap();
+            let frames_dir = temp_dir.join(output_name.trim_end_matches('/'));
+            let frames: Vec<_> = fs::read_dir(&frames_dir)
+                .unwrap()
+                .filter_map(|e| e.ok())
+                .collect();
+            assert_eq!(frames.len(), 3, "Should have 3 frames extracted");
+
+            let _ = fs::remove_dir_all(&temp_dir);
+        }
+
+        #[test]
+        fn test_extract_frames_animated_apng() {
+            let temp_dir = std::env::temp_dir().join("tui_img_test_extract_apng");
+            let _ = fs::remove_dir_all(&temp_dir);
+            fs::create_dir_all(&temp_dir).unwrap();
+
+            let input_path = temp_dir.join("test_animated.png");
+            create_animated_apng(&input_path).unwrap();
+
+            let file = make_file(&input_path);
+            assert!(file.is_animated, "Animated PNG should be detected as animated");
+
+            let result = tui_img::extract_frames_to_path(&file, &temp_dir, None);
+            assert!(result.is_ok(), "APNG frame extraction should succeed: {:?}", result.err());
+
+            let (_, output_name) = result.unwrap();
+            let frames_dir = temp_dir.join(output_name.trim_end_matches('/'));
+            let frames: Vec<_> = fs::read_dir(&frames_dir)
+                .unwrap()
+                .filter_map(|e| e.ok())
+                .collect();
+            assert_eq!(frames.len(), 3, "Should have 3 frames extracted");
+
+            let _ = fs::remove_dir_all(&temp_dir);
+        }
+
+        #[test]
+        fn test_extract_frames_single_frame_gif() {
+            let temp_dir = std::env::temp_dir().join("tui_img_test_extract_single_gif");
+            let _ = fs::remove_dir_all(&temp_dir);
+            fs::create_dir_all(&temp_dir).unwrap();
+
+            let input_path = temp_dir.join("single_frame.gif");
+            create_single_frame_gif(&input_path).unwrap();
+
+            let file = make_file(&input_path);
+            assert!(!file.is_animated, "Single-frame GIF should not be detected as animated");
+
+            let result = tui_img::extract_frames_to_path(&file, &temp_dir, None);
+            assert!(result.is_ok(), "Single-frame GIF should still succeed: {:?}", result.err());
+
+            let (_, output_name) = result.unwrap();
+            let frames_dir = temp_dir.join(output_name.trim_end_matches('/'));
+            let frames: Vec<_> = fs::read_dir(&frames_dir)
+                .unwrap()
+                .filter_map(|e| e.ok())
+                .collect();
+            assert_eq!(frames.len(), 1, "Should have 1 frame extracted");
+
+            let _ = fs::remove_dir_all(&temp_dir);
+        }
+
+        #[test]
+        fn test_extract_frames_single_frame_webp() {
+            let temp_dir = std::env::temp_dir().join("tui_img_test_extract_single_webp");
+            let _ = fs::remove_dir_all(&temp_dir);
+            fs::create_dir_all(&temp_dir).unwrap();
+
+            let input_path = temp_dir.join("single_frame.webp");
+            create_single_frame_webp(&input_path).unwrap();
+
+            let file = make_file(&input_path);
+            assert!(!file.is_animated, "Single-frame WebP should not be detected as animated");
+
+            let result = tui_img::extract_frames_to_path(&file, &temp_dir, None);
+            assert!(result.is_ok(), "Single-frame WebP should still succeed: {:?}", result.err());
+
+            let (_, output_name) = result.unwrap();
+            let frames_dir = temp_dir.join(output_name.trim_end_matches('/'));
+            let frames: Vec<_> = fs::read_dir(&frames_dir)
+                .unwrap()
+                .filter_map(|e| e.ok())
+                .collect();
+            assert_eq!(frames.len(), 1, "Should have 1 frame extracted");
+
+            let _ = fs::remove_dir_all(&temp_dir);
+        }
+
+        #[test]
+        fn test_extract_frames_single_frame_png() {
+            let temp_dir = std::env::temp_dir().join("tui_img_test_extract_single_png");
+            let _ = fs::remove_dir_all(&temp_dir);
+            fs::create_dir_all(&temp_dir).unwrap();
+
+            let input_path = temp_dir.join("single_frame.png");
+            create_single_frame_png(&input_path).unwrap();
+
+            let file = make_file(&input_path);
+            assert!(!file.is_animated, "Single-frame PNG should not be detected as animated");
+
+            let result = tui_img::extract_frames_to_path(&file, &temp_dir, None);
+            assert!(result.is_ok(), "Single-frame PNG should still succeed: {:?}", result.err());
+
+            let (_, output_name) = result.unwrap();
+            let frames_dir = temp_dir.join(output_name.trim_end_matches('/'));
+            let frames: Vec<_> = fs::read_dir(&frames_dir)
+                .unwrap()
+                .filter_map(|e| e.ok())
+                .collect();
+            assert_eq!(frames.len(), 1, "Should have 1 frame extracted");
+
+            let _ = fs::remove_dir_all(&temp_dir);
+        }
+
+        #[test]
+        fn test_extract_frames_same_format() {
+            let temp_dir = std::env::temp_dir().join("tui_img_test_extract_same_fmt");
+            let _ = fs::remove_dir_all(&temp_dir);
+            fs::create_dir_all(&temp_dir).unwrap();
+
+            let input_path = temp_dir.join("animated.gif");
+            create_animated_gif(&input_path).unwrap();
+
+            let file = make_file(&input_path);
+
+            let result = tui_img::extract_frames_to_path(&file, &temp_dir, None);
+            assert!(result.is_ok(), "Same-format extraction should succeed: {:?}", result.err());
+
+            let (_, output_name) = result.unwrap();
+            let frames_dir = temp_dir.join(output_name.trim_end_matches('/'));
+            assert!(frames_dir.exists(), "Frames directory should exist");
+
+            let _ = fs::remove_dir_all(&temp_dir);
+        }
+
+        #[test]
+        fn test_extract_frames_with_resize() {
+            let temp_dir = std::env::temp_dir().join("tui_img_test_extract_resize");
+            let _ = fs::remove_dir_all(&temp_dir);
+            fs::create_dir_all(&temp_dir).unwrap();
+
+            let input_path = temp_dir.join("big_animated.gif");
+            create_animated_gif(&input_path).unwrap();
+
+            let mut file = make_file(&input_path);
+            file.settings.max_width = Some(50);
+            file.settings.max_height = Some(50);
+
+            let result = tui_img::extract_frames_to_path(&file, &temp_dir, None);
+            assert!(result.is_ok(), "Extraction with resize should succeed: {:?}", result.err());
+
+            let (_, output_name) = result.unwrap();
+            let frames_dir = temp_dir.join(output_name.trim_end_matches('/'));
+            assert!(frames_dir.exists(), "Frames directory should exist");
+
+            let _ = fs::remove_dir_all(&temp_dir);
+        }
+    }
 }
