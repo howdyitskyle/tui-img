@@ -22,6 +22,8 @@ use models::{
     bytes_to_human, truncate_str, CachedImageInfo, ColorSpace, ExifData, ImageFile, ImageSettings,
     OutputFormat,
 };
+#[cfg(feature = "animation")]
+use models::detect_animation;
 use ratatui::prelude::Span;
 use ratatui::Terminal;
 
@@ -252,6 +254,10 @@ impl App {
                     if let Some(info) = metadata_map.get(&path) {
                         file.dimensions = info.dimensions;
                         file.color_type = info.color_type.clone();
+                    }
+                    #[cfg(feature = "animation")]
+                    {
+                        file.is_animated = detect_animation(&file.path);
                     }
                 }
                 file
