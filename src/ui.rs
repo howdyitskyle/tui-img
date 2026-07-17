@@ -778,7 +778,7 @@ pub fn render_output_panel(f: &mut Frame, area: Rect, app: &crate::App) {
             let bar: String = "█".repeat(filled) + &"░".repeat(bar_width - filled);
 
             output_lines.push(Line::from(vec![Span::raw("")]));
-            output_lines.push(Line::from(vec![Span::from("Compressing...").cyan().bold()]));
+            output_lines.push(Line::from(vec![Span::from("Processing...").cyan().bold()]));
             output_lines.push(Line::from(vec![Span::raw(status.clone()).white()]));
             output_lines.push(Line::from(vec![Span::raw("")]));
             output_lines.push(Line::from(vec![Span::raw(format!(

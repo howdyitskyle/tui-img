@@ -501,12 +501,21 @@ impl App {
                     is_animated: false,
                 };
 
+                let is_extracting = temp_file.settings.extract_frames;
+
                 match compress_image(&temp_file, &output_path, global_format) {
                     Ok((new_size, output_filename)) => {
-                        let _ = tx.send(CompressionEvent::Stage(format!(
-                            "Compressing to {}...",
-                            truncate_str(&filename, 30)
-                        )));
+                        let _ = tx.send(CompressionEvent::Stage(if is_extracting {
+                            format!(
+                                "Extracted frames from {}",
+                                truncate_str(&filename, 30)
+                            )
+                        } else {
+                            format!(
+                                "Compressed {}",
+                                truncate_str(&filename, 30)
+                            )
+                        }));
                         let _ = tx.send(CompressionEvent::Progress {
                             current: i + 1,
                             total: queue_total,
