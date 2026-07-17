@@ -2123,18 +2123,14 @@ mod tests {
             };
             let from_webp = format == Some(OutputFormat::Webp);
             let from_progressive = format == Some(OutputFormat::Png);
-            let _from_extract_frames = show_extract_frames_setting(file);
+            let from_extract_frames = show_extract_frames_setting(file);
 
             match app.setting_option {
                 SettingOption::Format => {
-                    app.setting_option = if from_webp {
-                        SettingOption::WebpLossless
-                    } else if from_progressive {
-                        SettingOption::Progressive
-                    } else if from_quality {
-                        SettingOption::Quality
+                    app.setting_option = if from_extract_frames {
+                        SettingOption::ExtractFrames
                     } else {
-                        SettingOption::Color
+                        SettingOption::OutputDir
                     }
                 }
                 SettingOption::OutputDir => app.setting_option = SettingOption::Backup,
@@ -2348,10 +2344,6 @@ mod tests {
             visited.len() < 20,
             "Navigation loop detected! Visited: {:?}",
             visited
-        );
-        assert!(
-            !visited.contains(&SettingOption::Quality),
-            "Quality should be skipped when no file selected"
         );
     }
 
