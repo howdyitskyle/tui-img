@@ -1636,9 +1636,11 @@ mod tests {
 
     #[test]
     fn test_image_settings_all_fields() {
-        let mut settings = ImageSettings::default();
+        let mut settings = ImageSettings {
+            quality: 75,
+            ..ImageSettings::default()
+        };
 
-        settings.quality = 75;
         assert_eq!(settings.quality, 75);
 
         settings.color_space = ColorSpace::Rgba;
@@ -1703,9 +1705,11 @@ mod tests {
 
     #[test]
     fn test_quality_bounds() {
-        let mut settings = ImageSettings::default();
+        let mut settings = ImageSettings {
+            quality: 0,
+            ..ImageSettings::default()
+        };
 
-        settings.quality = 0;
         assert_eq!(settings.quality, 0);
 
         settings.quality = 100;
@@ -1730,9 +1734,11 @@ mod tests {
 
     #[test]
     fn test_image_settings_clone() {
-        let mut settings = ImageSettings::default();
-        settings.quality = 75;
-        settings.max_width = Some(1920);
+        let settings = ImageSettings {
+            quality: 75,
+            max_width: Some(1920),
+            ..ImageSettings::default()
+        };
 
         let cloned = settings.clone();
         assert_eq!(cloned.quality, 75);
@@ -1999,13 +2005,12 @@ mod tests {
         let input = app.input_buffer.clone();
         assert_eq!(input, "~/images");
 
-        let final_path: PathBuf = if input.starts_with('~') {
+        let final_path: PathBuf = if let Some(remainder) = input.strip_prefix('~') {
             if let Ok(home) = std::env::var("HOME") {
-                let remainder = &input[1..];
-                if remainder.is_empty() || remainder.starts_with('/') {
-                    PathBuf::from(home).join(&input[2..])
+                if remainder.is_empty() {
+                    PathBuf::from(home)
                 } else {
-                    PathBuf::from(home).join(remainder)
+                    PathBuf::from(home).join(remainder.trim_start_matches('/'))
                 }
             } else {
                 PathBuf::from(&input)
