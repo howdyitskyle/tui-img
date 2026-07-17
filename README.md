@@ -17,6 +17,7 @@ A powerful terminal-based image batch compression and conversion tool built with
 - **Format Conversion** - Convert between JPEG, PNG, WebP, GIF, TIFF, BMP, TGA, and AVIF formats
 - **EXIF Management** - Keep or remove image metadata
 - **Resize Images** - Set maximum width/height with Lanczos3 resampling
+- **Animation Frame Extraction** - Extract frames from animated GIF, WebP, and APNG into separate static images (feature-gated behind `animation`)
 - **Virtual Scrolling** - Handle directories with thousands of files
 - **Metadata Caching** - Fast directory navigation with cached metadata
 - **Parallel Processing** - Uses rayon for parallel EXIF loading and directory scanning
@@ -29,6 +30,7 @@ A powerful terminal-based image batch compression and conversion tool built with
 
 - **Input**: JPEG, PNG, WebP, GIF, TIFF, BMP, TGA, AVIF (with `--features avif`)
 - **Output**: JPEG, PNG, WebP, GIF, TIFF, BMP, TGA, AVIF (or keep original format)
+- **Animation**: GIF, WebP, APNG frame extraction (with `--features animation`)
 - **AVIF**: Enable with `cargo install tui-img --features avif` (requires NASM: `sudo apt install nasm` or `brew install nasm`)
 
 ## Installation
@@ -45,6 +47,15 @@ cargo install tui-img
 git clone https://github.com/howdyitskyle/tui-img.git
 cd tui-img
 cargo build --release
+./target/release/tui-img
+```
+
+### From Source with Animation Support
+
+```bash
+git clone https://github.com/howdyitskyle/tui-img.git
+cd tui-img
+cargo build --release --features animation
 ./target/release/tui-img
 ```
 
@@ -93,6 +104,7 @@ Navigate to the Settings column and use:
 | Output | File behavior | Overwrite, New file |
 | Backup | Create backup first | Yes, No |
 | Output Dir | Custom output directory | Path (supports `~` expansion) |
+| Extract Frames | Extract animation frames | Yes, No (animated files only) |
 
 ### Compression
 
@@ -134,6 +146,7 @@ src/
 
 ```bash
 cargo test
+cargo test --features animation  # Include animation tests
 ```
 
 ## License
@@ -161,5 +174,6 @@ Built with:
 - [walkdir](https://github.com/BurntSushi/walkdir) - Directory traversal
 - [memmap2](https://github.com/RazrFalcon/memmap2-rs) - Memory-mapped file I/O
 - [ravif](https://github.com/kornelski/ravif) - AVIF encoding (feature-gated)
+- [gif](https://github.com/image-rs/image) - GIF animation decoding (feature-gated)
 - [anyhow](https://github.com/dtolnay/anyhow) - Error handling
 - [rayon](https://github.com/rayon-rs/rayon) - Parallel processing

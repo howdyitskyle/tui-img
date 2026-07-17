@@ -5,8 +5,10 @@
 cargo build     # Build
 cargo run       # Run
 cargo check     # Type-check
-cargo test      # Run 65 tests (56 unit + 9 integration)
+cargo test      # Run 73 tests (56 unit + 17 integration)
 cargo clippy    # Lint
+cargo test --features animation  # Include animation feature tests
+cargo test --features avif       # Include AVIF tests (requires NASM)
 ```
 
 ## Architecture
@@ -27,6 +29,7 @@ src/
 - `webp 0.3` - WebP encoding
 - `kamadak-exif 0.5` - EXIF metadata
 - `rayon 1.10` - Parallel processing
+- `gif 0.14` - GIF animation decoding (feature-gated behind `animation`)
 
 ## Release
 - **Version**: 1.0.8 (published to crates.io)
@@ -50,11 +53,13 @@ src/
   - PNG: Format → Quality → Color → EXIF → Progressive → PNG Comp → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
   - AVIF: Format → Quality → Color → EXIF → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
   - Other (GIF/TIFF/BMP/TGA/Same): Format → Color → EXIF → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
+  - Animated files add ExtractFrames between OutputDir and Format
 
 ## Testing
 - 65 tests run via `cargo test` (56 unit + 9 integration)
 - Integration tests verify JPEG/PNG/WebP/GIF/TIFF/BMP/TGA/AVIF compression and format conversion
 - AVIF tests require `--features avif` and NASM installed
+- Animation tests require `--features animation`
 - CI configured via `.github/workflows/ci.yml`
   - Runs tests and clippy on push/PR to main/master
 
