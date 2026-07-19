@@ -5,9 +5,9 @@
 cargo build     # Build
 cargo run       # Run
 cargo check     # Type-check
-cargo test      # Run 73 tests (56 unit + 17 integration)
+cargo test      # Run 65 tests (56 unit + 9 integration)
 cargo clippy    # Lint
-cargo test --features animation  # Include animation feature tests
+cargo test --features animation  # Run 75 tests (56 unit + 19 integration)
 cargo test --features avif       # Include AVIF tests (requires NASM)
 ```
 
@@ -53,9 +53,12 @@ src/
   - PNG: Format → Quality → Color → EXIF → Progressive → PNG Comp → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
   - AVIF: Format → Quality → Color → EXIF → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
   - Other (GIF/TIFF/BMP/TGA/Same): Format → Color → EXIF → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
-  - Animated files add ExtractFrames between OutputDir and Format
-  - Static files add AssembleFrames between OutputDir and Format
-  - AssembleFrames adds FrameDelay when enabled
+- Animation (feature-gated behind `animation`): animated files auto-detect and convert
+  - Animated → GIF/WebP: extracts frames, processes each, assembles into target format
+  - Animated → Same (GIF/WebP source): reassembles into source format
+  - Animated → Same (APNG source): copies original file
+  - Animated → PNG/JPEG/etc: extracts first frame only as single static file
+  - Static files compress normally; no user action needed for animation
 
 ## Testing
 - 73 tests run via `cargo test` (56 unit + 17 integration)

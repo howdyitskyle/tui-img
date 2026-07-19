@@ -53,18 +53,6 @@ fn show_progressive_setting(format: Option<OutputFormat>) -> bool {
     format == Some(OutputFormat::Png)
 }
 
-fn show_extract_frames_setting(file: Option<&ImageFile>) -> bool {
-    file.map(|f| f.is_animated).unwrap_or(false)
-}
-
-fn show_assemble_frames_setting(file: Option<&ImageFile>) -> bool {
-    file.map(|f| !f.is_animated).unwrap_or(false)
-}
-
-fn show_frame_delay_setting(file: Option<&ImageFile>) -> bool {
-    file.map(|f| f.settings.assemble_frames).unwrap_or(false)
-}
-
 #[derive(Clone, Copy, PartialEq)]
 pub enum FocusedColumn {
     Files,
@@ -86,9 +74,6 @@ pub enum SettingOption {
     Overwrite,
     Backup,
     OutputDir,
-    ExtractFrames,
-    AssembleFrames,
-    FrameDelay,
 }
 
 pub struct App {
@@ -451,7 +436,7 @@ impl App {
         let total = self.queue.len();
         self.progress = Some((0, total, 0, "Starting...".to_string()));
 
-        let queue_copy: Vec<(usize, PathBuf, PathBuf, String, ImageSettings, u64)> = self
+        let queue_copy: Vec<(usize, PathBuf, PathBuf, String, ImageSettings, u64, bool)> = self
             .queue
             .iter()
             .map(|&idx| {
@@ -473,6 +458,7 @@ impl App {
                     file.name.clone(),
                     file.settings.clone(),
                     file.size,
+                    file.is_animated,
                 )
             })
             .collect();
@@ -480,10 +466,6 @@ impl App {
         let _ = tx.send(CompressionEvent::Started(total));
 
         let global_format = self.global_output_format;
-        #[cfg(feature = "animation")]
-        let has_assemble = queue_copy.iter().any(|(_, _, _, _, s, _)| s.assemble_frames);
-        #[cfg(not(feature = "animation"))]
-        let has_assemble = false;
 
         thread::spawn(move || {
             use compression::FileResult;
@@ -491,140 +473,9 @@ impl App {
             let mut total_saved: u64 = 0;
             let queue_total = queue_copy.len();
 
-            #[cfg(feature = "animation")]
-            if has_assemble {
-                let _ = tx.send(CompressionEvent::Stage("Assembling frames...".to_string()));
-
-                let output_dir = queue_copy
-                    .iter()
-                    .find_map(|(_, _, _, _, s, _)| {
-                        s.output_directory.as_ref().map(PathBuf::from)
-                    });
-
-                let frame_delay = queue_copy
-                    .iter()
-                    .map(|(_, _, _, _, s, _)| s.frame_delay)
-                    .next()
-                    .unwrap_or(10);
-
-                let mut frame_paths: Vec<PathBuf> = Vec::new();
-                for (i, (idx, output_path, source_path, filename, settings, original_size)) in
-                    queue_copy.iter().enumerate()
-                {
-                    let mut temp_file = ImageFile {
-                        path: source_path.clone(),
-                        name: filename.clone(),
-                        is_dir: false,
-                        is_parent: false,
-                        size: *original_size,
-                        dimensions: None,
-                        color_type: None,
-                        needs_exif: false,
-                        settings: settings.clone(),
-                        queued: false,
-                        selected: false,
-                        exif_data: None,
-                        is_animated: false,
-                    };
-
-                    temp_file.settings.extract_frames = true;
-
-                    let _ = tx.send(CompressionEvent::Progress {
-                        current: i + 1,
-                        total: queue_total,
-                        filename: filename.clone(),
-                        sub_progress: 100,
-                    });
-
-                    match compress_image(&temp_file, output_path, global_format) {
-                        Ok((new_size, _)) => {
-                            let _ = tx.send(CompressionEvent::Stage(format!(
-                                "Extracted frames from {}",
-                                truncate_str(filename, 30)
-                            )));
-                            let frames_dir = source_path.parent().unwrap_or(source_path);
-                            let stem = source_path.file_stem().unwrap_or_default();
-                            let frames_dir = frames_dir.join(format!("{}_frames", stem.to_string_lossy()));
-                            if frames_dir.is_dir() {
-                                let mut entries: Vec<_> = std::fs::read_dir(&frames_dir)
-                                    .into_iter()
-                                    .flatten()
-                                    .filter_map(|e| e.ok())
-                                    .filter(|e| {
-                                        e.path().extension()
-                                            .and_then(|ext| ext.to_str())
-                                            .map(|ext| matches!(ext, "png" | "webp" | "gif"))
-                                            .unwrap_or(false)
-                                    })
-                                    .collect();
-                                entries.sort_by_key(|e| e.path());
-                                for entry in entries {
-                                    frame_paths.push(entry.path());
-                                }
-                            }
-                            frame_paths.sort_by_key(|p| p.file_name().unwrap_or_default().to_owned());
-                            total_saved += original_size.saturating_sub(new_size);
-                        }
-                        Err(e) => {
-                            let result = FileResult {
-                                file_index: *idx,
-                                original_size: *original_size,
-                                new_size: *original_size,
-                                output_filename: None,
-                                error: Some(e.to_string()),
-                            };
-                            results.push(result.clone());
-                            let _ = tx.send(CompressionEvent::FileCompleted(result));
-                        }
-                    }
-                }
-
-                let _ = tx.send(CompressionEvent::Stage("Assembling animated GIF...".to_string()));
-
-                let out_dir = output_dir.unwrap_or_else(|| {
-                    frame_paths.first()
-                        .and_then(|p| p.parent())
-                        .map(|p| p.to_path_buf())
-                        .unwrap_or_else(|| PathBuf::from("."))
-                });
-
-                match compression::assemble_frames_to_path(&frame_paths, &out_dir, frame_delay) {
-                    Ok((file_size, output_filename)) => {
-                        let _ = tx.send(CompressionEvent::Stage("Assembled animated GIF".to_string()));
-                        let _ = tx.send(CompressionEvent::Progress {
-                            current: queue_total,
-                            total: queue_total,
-                            filename: output_filename.clone(),
-                            sub_progress: 100,
-                        });
-                        let result = FileResult {
-                            file_index: queue_copy[0].0,
-                            original_size: total_saved + file_size,
-                            new_size: file_size,
-                            output_filename: Some(output_filename),
-                            error: None,
-                        };
-                        results.push(result.clone());
-                        let _ = tx.send(CompressionEvent::FileCompleted(result));
-                    }
-                    Err(e) => {
-                        let result = FileResult {
-                            file_index: queue_copy[0].0,
-                            original_size: total_saved,
-                            new_size: total_saved,
-                            output_filename: None,
-                            error: Some(e.to_string()),
-                        };
-                        results.push(result.clone());
-                        let _ = tx.send(CompressionEvent::FileCompleted(result));
-                    }
-                }
-            }
-
-            if !has_assemble {
-                for (i, (idx, output_path, source_path, filename, settings, original_size)) in
-                    queue_copy.into_iter().enumerate()
-                {
+            for (i, (idx, output_path, source_path, filename, settings, original_size, is_animated)) in
+                queue_copy.into_iter().enumerate()
+            {
                 let _ = tx.send(CompressionEvent::Stage(format!(
                     "Converting {}...",
                     truncate_str(&filename, 30)
@@ -643,24 +494,15 @@ impl App {
                     queued: false,
                     selected: false,
                     exif_data: None,
-                    is_animated: false,
+                    is_animated,
                 };
-
-                let is_extracting = temp_file.settings.extract_frames;
 
                 match compress_image(&temp_file, &output_path, global_format) {
                     Ok((new_size, output_filename)) => {
-                        let _ = tx.send(CompressionEvent::Stage(if is_extracting {
-                            format!(
-                                "Extracted frames from {}",
-                                truncate_str(&filename, 30)
-                            )
-                        } else {
-                            format!(
-                                "Compressed {}",
-                                truncate_str(&filename, 30)
-                            )
-                        }));
+                        let _ = tx.send(CompressionEvent::Stage(format!(
+                            "Compressed {}",
+                            truncate_str(&filename, 30)
+                        )));
                         let _ = tx.send(CompressionEvent::Progress {
                             current: i + 1,
                             total: queue_total,
@@ -693,7 +535,6 @@ impl App {
                         let _ = tx.send(CompressionEvent::FileCompleted(result));
                     }
                 }
-            }
             }
 
             let success_count = results.iter().filter(|r| r.error.is_none()).count();
@@ -966,9 +807,6 @@ fn handle_input(
                 let from_quality = show_quality_setting(format, file);
                 let from_webp = show_webp_setting(format);
                 let from_progressive = show_progressive_setting(format);
-                let from_extract_frames = show_extract_frames_setting(file);
-                let from_assemble_frames = show_assemble_frames_setting(file);
-                let from_frame_delay = show_frame_delay_setting(file);
 
                 app.setting_option = match app.setting_option {
                     SettingOption::Quality => {
@@ -988,17 +826,7 @@ fn handle_input(
                         }
                     }
                     SettingOption::Exif => SettingOption::Color,
-                    SettingOption::Format => {
-                        if from_frame_delay {
-                            SettingOption::FrameDelay
-                        } else if from_assemble_frames {
-                            SettingOption::AssembleFrames
-                        } else if from_extract_frames {
-                            SettingOption::ExtractFrames
-                        } else {
-                            SettingOption::OutputDir
-                        }
-                    }
+                    SettingOption::Format => SettingOption::OutputDir,
                     SettingOption::WebpLossless => SettingOption::Format,
                     SettingOption::Progressive => SettingOption::Exif,
                     SettingOption::PngCompress => SettingOption::Progressive,
@@ -1013,9 +841,6 @@ fn handle_input(
                     SettingOption::Overwrite => SettingOption::MaxHeight,
                     SettingOption::Backup => SettingOption::Overwrite,
                     SettingOption::OutputDir => SettingOption::Backup,
-                    SettingOption::ExtractFrames => SettingOption::OutputDir,
-                    SettingOption::AssembleFrames => SettingOption::OutputDir,
-                    SettingOption::FrameDelay => SettingOption::AssembleFrames,
                 };
             }
         }
@@ -1045,9 +870,6 @@ fn handle_input(
                 let from_quality = show_quality_setting(format, file);
                 let from_webp = show_webp_setting(format);
                 let from_progressive = show_progressive_setting(format);
-                let from_extract_frames = show_extract_frames_setting(file);
-                let from_assemble_frames = show_assemble_frames_setting(file);
-                let from_frame_delay = show_frame_delay_setting(file);
 
                 app.setting_option = match app.setting_option {
                     SettingOption::Format => {
@@ -1081,24 +903,7 @@ fn handle_input(
                     SettingOption::MaxHeight => SettingOption::Overwrite,
                     SettingOption::Overwrite => SettingOption::Backup,
                     SettingOption::Backup => SettingOption::OutputDir,
-                    SettingOption::OutputDir => {
-                        if from_extract_frames {
-                            SettingOption::ExtractFrames
-                        } else if from_assemble_frames {
-                            SettingOption::AssembleFrames
-                        } else {
-                            SettingOption::Format
-                        }
-                    }
-                    SettingOption::ExtractFrames => SettingOption::Format,
-                    SettingOption::AssembleFrames => {
-                        if from_frame_delay {
-                            SettingOption::FrameDelay
-                        } else {
-                            SettingOption::Format
-                        }
-                    }
-                    SettingOption::FrameDelay => SettingOption::Format,
+                    SettingOption::OutputDir => SettingOption::Format,
                 };
             }
         }
@@ -1238,29 +1043,6 @@ fn handle_input(
                     app.input_target = SettingOption::OutputDir;
                     app.input_buffer.clear();
                 }
-                SettingOption::ExtractFrames => {
-                    let idx = app
-                        .selected_index
-                        .filter(|&i| app.files[i].is_animated);
-                    if let Some(i) = idx {
-                        app.files[i].settings.extract_frames =
-                            !app.files[i].settings.extract_frames;
-                    }
-                }
-                SettingOption::AssembleFrames => {
-                    let idx = app
-                        .selected_index
-                        .filter(|&i| !app.files[i].is_animated);
-                    if let Some(i) = idx {
-                        app.files[i].settings.assemble_frames =
-                            !app.files[i].settings.assemble_frames;
-                    }
-                }
-                SettingOption::FrameDelay => {
-                    if let Some(file) = app.selected_file_mut() {
-                        file.settings.frame_delay = file.settings.frame_delay.saturating_sub(5).max(1);
-                    }
-                }
             };
         }
         KeyCode::Right if app.focused_column == FocusedColumn::ImageSettings => {
@@ -1297,6 +1079,8 @@ fn handle_input(
                         Some(OutputFormat::Bmp) => Some(OutputFormat::Tga),
                         #[cfg(feature = "avif")]
                         Some(OutputFormat::Tga) => Some(OutputFormat::Avif),
+                        #[cfg(feature = "avif")]
+                        Some(OutputFormat::Avif) => None,
                         #[cfg(not(feature = "avif"))]
                         Some(OutputFormat::Tga) => None,
                     };
@@ -1352,29 +1136,6 @@ fn handle_input(
                     app.input_mode = true;
                     app.input_target = SettingOption::OutputDir;
                     app.input_buffer.clear();
-                }
-                SettingOption::ExtractFrames => {
-                    let idx = app
-                        .selected_index
-                        .filter(|&i| app.files[i].is_animated);
-                    if let Some(i) = idx {
-                        app.files[i].settings.extract_frames =
-                            !app.files[i].settings.extract_frames;
-                    }
-                }
-                SettingOption::AssembleFrames => {
-                    let idx = app
-                        .selected_index
-                        .filter(|&i| !app.files[i].is_animated);
-                    if let Some(i) = idx {
-                        app.files[i].settings.assemble_frames =
-                            !app.files[i].settings.assemble_frames;
-                    }
-                }
-                SettingOption::FrameDelay => {
-                    if let Some(file) = app.selected_file_mut() {
-                        file.settings.frame_delay = (file.settings.frame_delay + 5).min(100);
-                    }
                 }
             };
         }
@@ -2027,7 +1788,7 @@ mod tests {
         app.queue.push(1);
         app.queue.push(2);
 
-        let queue_copy: Vec<(usize, PathBuf, PathBuf, String, ImageSettings, u64)> = app
+        let queue_copy: Vec<(usize, PathBuf, PathBuf, String, ImageSettings, u64, bool)> = app
             .queue
             .iter()
             .map(|&idx| {
@@ -2049,6 +1810,7 @@ mod tests {
                     file.name.clone(),
                     file.settings.clone(),
                     file.size,
+                    file.is_animated,
                 )
             })
             .collect();
@@ -2108,7 +1870,7 @@ mod tests {
         app.queue.push(0);
         app.files[0].queued = true;
 
-        let queue_copy: Vec<(usize, PathBuf, PathBuf, String, ImageSettings, u64)> = app
+        let queue_copy: Vec<(usize, PathBuf, PathBuf, String, ImageSettings, u64, bool)> = app
             .queue
             .iter()
             .map(|&idx| {
@@ -2125,6 +1887,7 @@ mod tests {
                     file.name.clone(),
                     file.settings.clone(),
                     file.size,
+                    file.is_animated,
                 )
             })
             .collect();
@@ -2264,9 +2027,6 @@ mod tests {
             };
             let from_webp = format == Some(OutputFormat::Webp);
             let from_progressive = format == Some(OutputFormat::Png);
-            let from_extract_frames = show_extract_frames_setting(file);
-            let from_assemble_frames = show_assemble_frames_setting(file);
-            let from_frame_delay = show_frame_delay_setting(file);
 
             match app.setting_option {
                 SettingOption::Format => {
@@ -2300,24 +2060,7 @@ mod tests {
                 SettingOption::MaxHeight => app.setting_option = SettingOption::Overwrite,
                 SettingOption::Overwrite => app.setting_option = SettingOption::Backup,
                 SettingOption::Backup => app.setting_option = SettingOption::OutputDir,
-                SettingOption::OutputDir => {
-                    app.setting_option = if from_extract_frames {
-                        SettingOption::ExtractFrames
-                    } else if from_assemble_frames {
-                        SettingOption::AssembleFrames
-                    } else {
-                        SettingOption::Format
-                    }
-                }
-                SettingOption::ExtractFrames => app.setting_option = SettingOption::Format,
-                SettingOption::AssembleFrames => {
-                    app.setting_option = if from_frame_delay {
-                        SettingOption::FrameDelay
-                    } else {
-                        SettingOption::Format
-                    }
-                }
-                SettingOption::FrameDelay => app.setting_option = SettingOption::Format,
+                SettingOption::OutputDir => app.setting_option = SettingOption::Format,
             }
         }
         visited
@@ -2349,22 +2092,9 @@ mod tests {
             };
             let from_webp = format == Some(OutputFormat::Webp);
             let from_progressive = format == Some(OutputFormat::Png);
-            let from_extract_frames = show_extract_frames_setting(file);
-            let from_assemble_frames = show_assemble_frames_setting(file);
-            let from_frame_delay = show_frame_delay_setting(file);
 
             match app.setting_option {
-                SettingOption::Format => {
-                    app.setting_option = if from_frame_delay {
-                        SettingOption::FrameDelay
-                    } else if from_assemble_frames {
-                        SettingOption::AssembleFrames
-                    } else if from_extract_frames {
-                        SettingOption::ExtractFrames
-                    } else {
-                        SettingOption::OutputDir
-                    }
-                }
+                SettingOption::Format => app.setting_option = SettingOption::OutputDir,
                 SettingOption::OutputDir => app.setting_option = SettingOption::Backup,
                 SettingOption::Backup => app.setting_option = SettingOption::Overwrite,
                 SettingOption::Overwrite => app.setting_option = SettingOption::MaxHeight,
@@ -2396,15 +2126,6 @@ mod tests {
                 SettingOption::WebpLossless => app.setting_option = SettingOption::Format,
                 SettingOption::Progressive => app.setting_option = SettingOption::Exif,
                 SettingOption::PngCompress => app.setting_option = SettingOption::Progressive,
-                SettingOption::ExtractFrames => app.setting_option = SettingOption::Format,
-                SettingOption::AssembleFrames => {
-                    app.setting_option = if from_frame_delay {
-                        SettingOption::FrameDelay
-                    } else {
-                        SettingOption::Format
-                    }
-                }
-                SettingOption::FrameDelay => app.setting_option = SettingOption::Format,
             }
         }
         visited

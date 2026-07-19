@@ -7,6 +7,18 @@ use oxipng::Interlacing;
 use std::fs::{self, File};
 use std::io::Write as IoWrite;
 use std::path::Path;
+#[cfg(feature = "animation")]
+use std::path::PathBuf;
+#[cfg(feature = "animation")]
+use std::sync::atomic::{AtomicU64, Ordering};
+
+#[cfg(feature = "animation")]
+static FRAME_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(feature = "animation")]
+fn rand_suffix() -> u64 {
+    FRAME_COUNTER.fetch_add(1, Ordering::Relaxed)
+}
 
 fn ensure_dir_exists(path: &Path) -> Result<()> {
     if let Some(parent) = path.parent() {
@@ -50,13 +62,48 @@ pub fn compress_image(
     global_format: Option<OutputFormat>,
 ) -> Result<(u64, String)> {
     #[cfg(feature = "animation")]
-    if file.settings.extract_frames {
-        let base_dir = file
-            .settings
-            .output_directory
-            .as_deref()
-            .unwrap_or_else(|| output_path.parent().unwrap_or(Path::new(".")));
-        return extract_frames_to_path(file, base_dir, global_format);
+    if file.is_animated {
+        let target_format = global_format.unwrap_or(file.settings.output_format);
+        let source_ext = file.extension().unwrap_or_default().to_lowercase();
+        let resolved_format = if target_format == OutputFormat::Same {
+            match source_ext.as_str() {
+                "gif" => OutputFormat::Gif,
+                "webp" => OutputFormat::Webp,
+                _ => target_format,
+            }
+        } else {
+            target_format
+        };
+        if matches!(
+            resolved_format,
+            OutputFormat::Gif | OutputFormat::Webp | OutputFormat::Png
+        ) {
+            return convert_animated(file, output_path, global_format);
+        }
+        // APNG→Same: copy original if no settings changes, else re-encode
+        if target_format == OutputFormat::Same && source_ext == "png" {
+            let has_custom_settings = file.settings.max_width.is_some()
+                || file.settings.max_height.is_some()
+                || file.settings.color_space != ColorSpace::Rgb;
+            if !has_custom_settings {
+                let final_output_path = if file.settings.overwrite {
+                    output_path.to_path_buf()
+                } else {
+                    get_unique_path(output_path)
+                };
+                ensure_dir_exists(&final_output_path)?;
+                fs::copy(&file.path, &final_output_path)?;
+                let file_size = final_output_path.metadata()?.len();
+                let result_name = final_output_path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("output")
+                    .to_string();
+                return Ok((file_size, result_name));
+            }
+            return convert_animated(file, output_path, global_format);
+        }
+        // Non-animation target: fall through to load first frame
     }
 
     let img = image::open(&file.path).context("Failed to open image")?;
@@ -293,21 +340,24 @@ pub fn compress_avif(
     output_path: &Path,
     settings: &ImageSettings,
 ) -> Result<u64> {
-    use imgref::ImgRef;
-    use ravif::Encoder;
-    use rgb::RGBA8;
+    use ravif::{Encoder, Img, RGBA8};
 
     let rgba = img.to_rgba8();
-    let img_ref = ImgRef::new(rgba.as_raw(), rgba.width(), rgba.height());
+    let raw = rgba.into_raw();
+    let pixels: Vec<RGBA8> = raw
+        .chunks_exact(4)
+        .map(|c| RGBA8::new(c[0], c[1], c[2], c[3]))
+        .collect();
+    let img_ref = Img::new(pixels.as_slice(), img.width() as usize, img.height() as usize);
 
     let quality = settings.quality as f32;
-    let encoder = Encoder::from_rgba(img_ref, quality);
-    let (avif_bytes, _) = encoder.encode();
+    let encoder = Encoder::new().with_quality(quality);
+    let avif = encoder.encode_rgba(img_ref)?;
 
     let mut file = File::create(output_path)?;
-    file.write_all(&avif_bytes)?;
+    file.write_all(&avif.avif_file)?;
 
-    Ok(avif_bytes.len() as u64)
+    Ok(avif.avif_file.len() as u64)
 }
 
 #[allow(dead_code)]
@@ -332,9 +382,6 @@ pub fn compress_image_to_path(
         overwrite: false,
         backup: false,
         output_directory: None,
-        extract_frames: false,
-        assemble_frames: false,
-        frame_delay: 10,
     };
 
     ensure_dir_exists(output_path)?;
@@ -356,7 +403,7 @@ pub fn compress_image_to_path(
 }
 
 #[cfg(feature = "animation")]
-pub fn extract_frames_to_path(
+fn extract_frames_to_path(
     file: &ImageFile,
     base_dir: &Path,
     global_format: Option<OutputFormat>,
@@ -370,19 +417,19 @@ pub fn extract_frames_to_path(
     ensure_dir_exists(&frames_dir.join("placeholder"))?;
 
     let target_format = global_format.unwrap_or(file.settings.output_format);
-    let ext = match target_format {
+    let output_ext = match target_format {
         OutputFormat::Same => file.extension().unwrap_or_else(|| "png".to_string()),
         _ => target_format.extension().to_string(),
     };
 
     let file_vec = fs::read(&file.path).context("Failed to read file for frame extraction")?;
-    let ext_lower = ext.to_lowercase();
+    let source_ext = file.extension().unwrap_or_default().to_lowercase();
 
-    let frame_count = match ext_lower.as_str() {
-        "gif" => extract_gif_frames(&file_vec, &frames_dir, &ext, &file.settings)?,
-        "webp" => extract_webp_frames(&file_vec, &frames_dir, &ext, &file.settings)?,
-        "png" => extract_apng_frames(&file_vec, &frames_dir, &ext, &file.settings)?,
-        _ => anyhow::bail!("Frame extraction not supported for .{}", ext),
+    let frame_count = match source_ext.as_str() {
+        "gif" => extract_gif_frames(&file_vec, &frames_dir, &output_ext, &file.settings)?,
+        "webp" => extract_webp_frames(&file_vec, &frames_dir, &output_ext, &file.settings)?,
+        "png" => extract_apng_frames(&file_vec, &frames_dir, &output_ext, &file.settings)?,
+        _ => anyhow::bail!("Frame extraction not supported for .{}", source_ext),
     };
 
     let output_name = format!("{}/", frames_dir.display());
@@ -403,7 +450,9 @@ fn extract_gif_frames(
         .context("Failed to decode GIF")?;
 
     let mut frame_idx: u32 = 0;
+    let mut delays: Vec<u32> = Vec::new();
     while let Some(frame) = decoder.read_next_frame().context("Failed to read GIF frame")? {
+        delays.push(frame.delay as u32 * 10);
         frame_idx += 1;
         let rgba_img = image::RgbaImage::from_raw(
             frame.width as u32,
@@ -417,6 +466,7 @@ fn extract_gif_frames(
         encode_frame(&processed, &frame_path, ext)?;
     }
 
+    write_delays(frames_dir, &delays)?;
     Ok(frame_idx as u64)
 }
 
@@ -433,7 +483,7 @@ fn extract_webp_frames(
     let frames: Vec<image::Frame> = decoder
         .into_frames()
         .collect_frames()
-        .unwrap_or_default();
+        .context("Failed to collect WebP frames")?;
 
     if frames.is_empty() {
         let cursor = std::io::Cursor::new(data);
@@ -443,11 +493,15 @@ fn extract_webp_frames(
         let processed = apply_processing(img, settings);
         let frame_path = frames_dir.join(format!("frame_{:03}.{}", 1, ext));
         encode_frame(&processed, &frame_path, ext)?;
+        write_delays(frames_dir, &[100])?;
         return Ok(1);
     }
 
     let total = frames.len() as u64;
+    let mut delays: Vec<u32> = Vec::with_capacity(frames.len());
     for (i, frame) in frames.into_iter().enumerate() {
+        let (numer, denom) = frame.delay().numer_denom_ms();
+        delays.push(numer.checked_div(denom).unwrap_or(100));
         let rgba_buf = frame.buffer().clone();
         let dyn_img = image::DynamicImage::ImageRgba8(rgba_buf);
         let processed = apply_processing(dyn_img, settings);
@@ -455,6 +509,7 @@ fn extract_webp_frames(
         encode_frame(&processed, &frame_path, ext)?;
     }
 
+    write_delays(frames_dir, &delays)?;
     Ok(total)
 }
 
@@ -485,11 +540,15 @@ fn extract_apng_frames(
         let processed = apply_processing(img, settings);
         let frame_path = frames_dir.join(format!("frame_{:03}.{}", 1, ext));
         encode_frame(&processed, &frame_path, ext)?;
+        write_delays(frames_dir, &[100])?;
         return Ok(1);
     }
 
     let total = frames.len() as u64;
+    let mut delays: Vec<u32> = Vec::with_capacity(frames.len());
     for (i, frame) in frames.into_iter().enumerate() {
+        let (numer, denom) = frame.delay().numer_denom_ms();
+        delays.push(numer.checked_div(denom).unwrap_or(100));
         let rgba_buf = frame.buffer().clone();
         let dyn_img = image::DynamicImage::ImageRgba8(rgba_buf);
         let processed = apply_processing(dyn_img, settings);
@@ -497,6 +556,7 @@ fn extract_apng_frames(
         encode_frame(&processed, &frame_path, ext)?;
     }
 
+    write_delays(frames_dir, &delays)?;
     Ok(total)
 }
 
@@ -535,10 +595,142 @@ fn encode_frame(img: &image::DynamicImage, path: &Path, ext: &str) -> Result<()>
 }
 
 #[cfg(feature = "animation")]
-pub fn assemble_frames_to_path(
-    frame_paths: &[std::path::PathBuf],
-    output_dir: &Path,
-    frame_delay: u16,
+fn resolve_output_path(output_path: &Path, ext: &str, settings: &ImageSettings) -> PathBuf {
+    let base_output_path = {
+        let out_stem = output_path
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy();
+        output_path.with_file_name(format!("{}.{}", out_stem, ext))
+    };
+    if settings.overwrite {
+        base_output_path
+    } else {
+        get_unique_path(&base_output_path)
+    }
+}
+
+#[cfg(feature = "animation")]
+fn convert_animated(
+    file: &ImageFile,
+    output_path: &Path,
+    global_format: Option<OutputFormat>,
+) -> Result<(u64, String)> {
+    let target_format = global_format.unwrap_or(file.settings.output_format);
+    let source_ext = file.extension().unwrap_or_default().to_lowercase();
+
+    let resolved_format = if target_format == OutputFormat::Same {
+        match source_ext.as_str() {
+            "gif" => OutputFormat::Gif,
+            "webp" => OutputFormat::Webp,
+            "png" => OutputFormat::Png,
+            _ => target_format,
+        }
+    } else {
+        target_format
+    };
+
+    let stem = file
+        .path
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy();
+
+    match resolved_format {
+        OutputFormat::Png => {
+            let temp_dir =
+                std::env::temp_dir().join(format!("tui_img_frames_{}_{}", std::process::id(), rand_suffix()));
+            let _ = fs::create_dir_all(&temp_dir);
+            let result = (|| -> Result<(u64, String)> {
+                extract_frames_to_path(file, &temp_dir, Some(OutputFormat::Png))?;
+                let frames_dir = temp_dir.join(format!("{}_frames", stem));
+                let (frame_paths, delays) = collect_frame_files(&frames_dir)?;
+                let final_output_path = resolve_output_path(output_path, "png", &file.settings);
+                ensure_dir_exists(&final_output_path)?;
+                assemble_apng(&frame_paths, &final_output_path, &delays)
+            })();
+            let _ = fs::remove_dir_all(&temp_dir);
+            result
+        }
+        OutputFormat::Gif => {
+            let temp_dir =
+                std::env::temp_dir().join(format!("tui_img_frames_{}_{}", std::process::id(), rand_suffix()));
+            let _ = fs::create_dir_all(&temp_dir);
+            let result = (|| -> Result<(u64, String)> {
+                extract_frames_to_path(file, &temp_dir, Some(OutputFormat::Png))?;
+                let frames_dir = temp_dir.join(format!("{}_frames", stem));
+                let (frame_paths, delays) = collect_frame_files(&frames_dir)?;
+                let final_output_path = resolve_output_path(output_path, "gif", &file.settings);
+                ensure_dir_exists(&final_output_path)?;
+                assemble_gif(&frame_paths, &final_output_path, &delays)
+            })();
+            let _ = fs::remove_dir_all(&temp_dir);
+            result
+        }
+        OutputFormat::Webp => {
+            let temp_dir =
+                std::env::temp_dir().join(format!("tui_img_frames_{}_{}", std::process::id(), rand_suffix()));
+            let _ = fs::create_dir_all(&temp_dir);
+            let result = (|| -> Result<(u64, String)> {
+                extract_frames_to_path(file, &temp_dir, Some(OutputFormat::Png))?;
+                let frames_dir = temp_dir.join(format!("{}_frames", stem));
+                let (frame_paths, delays) = collect_frame_files(&frames_dir)?;
+                let final_output_path = resolve_output_path(output_path, "webp", &file.settings);
+                ensure_dir_exists(&final_output_path)?;
+                assemble_webp(&frame_paths, &final_output_path, &delays)
+            })();
+            let _ = fs::remove_dir_all(&temp_dir);
+            result
+        }
+        _ => anyhow::bail!("convert_animated called with non-animation format"),
+    }
+}
+
+#[cfg(feature = "animation")]
+fn collect_frame_files(dir: &Path) -> Result<(Vec<PathBuf>, Vec<u32>)> {
+    let mut paths: Vec<PathBuf> = fs::read_dir(dir)
+        .context("Failed to read frames directory")?
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path()
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| matches!(ext, "png" | "webp" | "gif"))
+                .unwrap_or(false)
+        })
+        .map(|e| e.path())
+        .collect();
+    paths.sort();
+    let delays = read_delays(dir).unwrap_or_else(|| vec![100; paths.len()]);
+    Ok((paths, delays))
+}
+
+#[cfg(feature = "animation")]
+const DELAYS_FILE: &str = "delays.txt";
+
+#[cfg(feature = "animation")]
+fn write_delays(frames_dir: &Path, delays: &[u32]) -> Result<()> {
+    let content: String = delays.iter().map(|d| format!("{}\n", d)).collect();
+    fs::write(frames_dir.join(DELAYS_FILE), content)?;
+    Ok(())
+}
+
+#[cfg(feature = "animation")]
+fn read_delays(frames_dir: &Path) -> Option<Vec<u32>> {
+    let content = fs::read_to_string(frames_dir.join(DELAYS_FILE)).ok()?;
+    Some(
+        content
+            .lines()
+            .filter_map(|line| line.trim().parse::<u32>().ok())
+            .collect(),
+    )
+}
+
+#[cfg(feature = "animation")]
+fn assemble_gif(
+    frame_paths: &[PathBuf],
+    output_path: &Path,
+    delays: &[u32],
 ) -> Result<(u64, String)> {
     use std::io::BufWriter;
 
@@ -547,26 +739,17 @@ pub fn assemble_frames_to_path(
     }
 
     let first_img =
-        image::open(&frame_paths[0]).context("Failed to open first frame for assembly")?;
+        image::open(&frame_paths[0]).context("Failed to open first frame for GIF assembly")?;
     let width = first_img.width() as u16;
     let height = first_img.height() as u16;
 
-    let stem = frame_paths[0]
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("frame");
-    let output_name = format!("{}_animated.gif", stem);
-    let output_path = get_unique_path(&output_dir.join(&output_name));
-    ensure_dir_exists(&output_path)?;
-
-    let file = File::create(&output_path)?;
+    let file = File::create(output_path)?;
     let mut buf_writer = BufWriter::new(file);
     let mut encoder = gif::Encoder::new(&mut buf_writer, width, height, &[])?;
     encoder.set_repeat(gif::Repeat::Infinite)?;
 
-    for frame_path in frame_paths {
-        let img =
-            image::open(frame_path).context("Failed to open frame for assembly")?;
+    for (frame_path, &delay_ms) in frame_paths.iter().zip(delays.iter()) {
+        let img = image::open(frame_path).context("Failed to open frame for GIF assembly")?;
         let resized = if img.width() as u16 != width || img.height() as u16 != height {
             img.resize_exact(
                 width as u32,
@@ -578,19 +761,129 @@ pub fn assemble_frames_to_path(
         };
         let rgba = resized.to_rgba8();
         let mut frame = gif::Frame::from_rgba(width, height, &mut rgba.into_raw());
-        frame.delay = frame_delay;
+        frame.delay = (delay_ms / 10).max(1) as u16;
         encoder.write_frame(&frame)?;
     }
 
     drop(encoder);
     buf_writer.flush()?;
     drop(buf_writer);
-    let meta = std::fs::metadata(&output_path)?;
-    let file_size = meta.len();
+
+    let file_size = output_path.metadata()?.len();
     let result_name = output_path
         .file_name()
         .and_then(|s| s.to_str())
-        .unwrap_or(&output_name)
+        .unwrap_or("output.gif")
+        .to_string();
+
+    Ok((file_size, result_name))
+}
+
+#[cfg(feature = "animation")]
+fn assemble_webp(
+    frame_paths: &[PathBuf],
+    output_path: &Path,
+    delays: &[u32],
+) -> Result<(u64, String)> {
+    if frame_paths.is_empty() {
+        anyhow::bail!("No frames to assemble");
+    }
+
+    let first_img =
+        image::open(&frame_paths[0]).context("Failed to open first frame for WebP assembly")?;
+    let width = first_img.width();
+    let height = first_img.height();
+
+    let mut config = webp::WebPConfig::new()
+        .map_err(|_| anyhow::anyhow!("Failed to init WebP config"))?;
+    config.method = 4;
+    config.pass = 10;
+
+    let mut encoder = webp::AnimEncoder::new(width, height, &config);
+
+    let mut owned_frames: Vec<(Vec<u8>, u32, u32)> = Vec::new();
+    for frame_path in frame_paths {
+        let img = image::open(frame_path).context("Failed to open frame for WebP assembly")?;
+        let rgba = img.to_rgba8();
+        owned_frames.push((rgba.into_raw(), width, height));
+    }
+
+    let mut timestamp: i32 = 0;
+    for (i, (rgba_data, w, h)) in owned_frames.iter().enumerate() {
+        let delay_ms = delays.get(i).copied().unwrap_or(100) as i32;
+        encoder.add_frame(webp::AnimFrame::new(
+            rgba_data,
+            webp::PixelLayout::Rgba,
+            *w,
+            *h,
+            timestamp,
+            None,
+        ));
+        timestamp += delay_ms;
+    }
+
+    let webp_data = encoder
+        .try_encode()
+        .map_err(|e| anyhow::anyhow!("Animated WebP encode failed: {:?}", e))?;
+    let mut file = File::create(output_path)?;
+    file.write_all(&webp_data)?;
+
+    let file_size = output_path.metadata()?.len();
+    let result_name = output_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("output.webp")
+        .to_string();
+
+    Ok((file_size, result_name))
+}
+
+#[cfg(feature = "animation")]
+fn assemble_apng(
+    frame_paths: &[PathBuf],
+    output_path: &Path,
+    delays: &[u32],
+) -> Result<(u64, String)> {
+    use png::{BlendOp, BitDepth, ColorType, DisposeOp};
+
+    if frame_paths.is_empty() {
+        anyhow::bail!("No frames to assemble");
+    }
+
+    let first_img =
+        image::open(&frame_paths[0]).context("Failed to open first frame for APNG assembly")?;
+    let width = first_img.width();
+    let height = first_img.height();
+
+    let file = File::create(output_path)?;
+    let mut encoder = png::Encoder::new(file, width, height);
+    encoder.set_animated(frame_paths.len() as u32, 0)?;
+    encoder.set_color(ColorType::Rgba);
+    encoder.set_depth(BitDepth::Eight);
+
+    let mut writer = encoder.write_header()?;
+
+    for (i, frame_path) in frame_paths.iter().enumerate() {
+        let img = image::open(frame_path).context("Failed to open frame for APNG assembly")?;
+        let rgba = img.to_rgba8();
+
+        let delay_ms = delays.get(i).copied().unwrap_or(100);
+        let num = delay_ms.min(u16::MAX as u32).max(1) as u16;
+        let denom = 1000u16;
+
+        writer.set_frame_delay(num, denom)?;
+        writer.set_dispose_op(DisposeOp::None)?;
+        writer.set_blend_op(BlendOp::Source)?;
+        writer.write_image_data(rgba.as_raw())?;
+    }
+
+    writer.finish()?;
+
+    let file_size = output_path.metadata()?.len();
+    let result_name = output_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("output.png")
         .to_string();
 
     Ok((file_size, result_name))

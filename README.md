@@ -17,8 +17,7 @@ A powerful terminal-based image batch compression and conversion tool built with
 - **Format Conversion** - Convert between JPEG, PNG, WebP, GIF, TIFF, BMP, TGA, and AVIF formats
 - **EXIF Management** - Keep or remove image metadata
 - **Resize Images** - Set maximum width/height with Lanczos3 resampling
-- **Animation Frame Extraction** - Extract frames from animated GIF, WebP, and APNG into separate static images (feature-gated behind `animation`)
-- **Animation Assembly** - Assemble static images into animated GIF with configurable frame delay (feature-gated behind `animation`)
+- **Animation Support** - Automatic conversion of animated GIF, WebP, and APNG files (feature-gated behind `animation`)
 - **Virtual Scrolling** - Handle directories with thousands of files
 - **Metadata Caching** - Fast directory navigation with cached metadata
 - **Parallel Processing** - Uses rayon for parallel EXIF loading and directory scanning
@@ -31,7 +30,7 @@ A powerful terminal-based image batch compression and conversion tool built with
 
 - **Input**: JPEG, PNG, WebP, GIF, TIFF, BMP, TGA, AVIF (with `--features avif`)
 - **Output**: JPEG, PNG, WebP, GIF, TIFF, BMP, TGA, AVIF (or keep original format)
-- **Animation**: GIF, WebP, APNG frame extraction (with `--features animation`)
+- **Animation**: GIF, WebP, APNG automatic conversion (with `--features animation`)
 - **AVIF**: Enable with `cargo install tui-img --features avif` (requires NASM: `sudo apt install nasm` or `brew install nasm`)
 
 ## Installation
@@ -105,9 +104,6 @@ Navigate to the Settings column and use:
 | Output | File behavior | Overwrite, New file |
 | Backup | Create backup first | Yes, No |
 | Output Dir | Custom output directory | Path (supports `~` expansion) |
-| Extract Frames | Extract animation frames | Yes, No (animated files only) |
-| Assemble Frames | Assemble frames into animated GIF | Yes, No (static files only) |
-| Frame Delay | Delay between frames in centiseconds | 1–100 (step 5, default 10) |
 
 ### Compression
 
@@ -121,6 +117,15 @@ Navigate to the Settings column and use:
 ## Configuration
 
 Default settings are applied automatically. Navigate to the Settings panel to customize compression options per file or globally.
+
+### Animation Behavior (with `--features animation`)
+
+Animated files (GIF, WebP, APNG) are automatically detected and converted based on the selected output format:
+
+- **Animated → GIF/WebP**: All frames are extracted, processed (resize, color), and assembled into an animated output file
+- **Animated → Same format**: Animation is preserved in the source format (GIF→GIF, WebP→WebP). APNG→Same copies the original file
+- **Animated → PNG/JPEG/etc**: First frame only is extracted as a single static file
+- **Static files**: Compressed normally with no animation handling
 
 ## Performance
 
