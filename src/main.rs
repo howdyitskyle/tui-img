@@ -551,11 +551,19 @@ impl App {
                 };
 
                 #[cfg(feature = "animation")]
-                fn do_assemble(file: &ImageFile, output: &Path, fmt: Option<OutputFormat>) -> Result<(u64, String)> {
+                fn do_assemble(
+                    file: &ImageFile,
+                    output: &Path,
+                    fmt: Option<OutputFormat>,
+                ) -> Result<(u64, String)> {
                     compression::assemble_frames(file, output, fmt)
                 }
                 #[cfg(not(feature = "animation"))]
-                fn do_assemble(_file: &ImageFile, _output: &Path, _fmt: Option<OutputFormat>) -> Result<(u64, String)> {
+                fn do_assemble(
+                    _file: &ImageFile,
+                    _output: &Path,
+                    _fmt: Option<OutputFormat>,
+                ) -> Result<(u64, String)> {
                     anyhow::bail!("Animation support not enabled")
                 }
 
