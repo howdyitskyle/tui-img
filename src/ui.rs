@@ -781,11 +781,10 @@ pub fn render_output_panel(f: &mut Frame, area: Rect, app: &crate::App) {
             .skip(scroll)
             .take(max_visible)
         {
-            let file = &app.files[result.file_index];
             if let Some(ref error) = result.error {
                 output_lines.push(Line::from(vec![
                     Span::from(format!("  {} ", "✗")).red(),
-                    Span::from(&file.name).red(),
+                    Span::from(&result.source_name).red(),
                     Span::raw(" ").dark_gray(),
                     Span::raw(truncate_str(error, 30)).red(),
                 ]));
@@ -803,10 +802,10 @@ pub fn render_output_panel(f: &mut Frame, area: Rect, app: &crate::App) {
                 };
                 output_lines.push(Line::from(vec![
                     Span::from(format!("  {} ", "✓")).cyan(),
-                    Span::from(&file.name).white(),
+                    Span::from(&result.source_name).white(),
                 ]));
                 if let Some(ref out_name) = result.output_filename {
-                    if out_name != &file.name {
+                    if out_name != &result.source_name {
                         output_lines.push(Line::from(vec![
                             Span::raw("    ").dark_gray(),
                             Span::from("→ ").dark_gray(),

@@ -32,6 +32,7 @@ fn ensure_dir_exists(path: &Path) -> Result<()> {
 #[derive(Debug, Clone)]
 pub struct FileResult {
     pub file_index: usize,
+    pub source_name: String,
     pub original_size: u64,
     pub new_size: u64,
     pub output_filename: Option<String>,

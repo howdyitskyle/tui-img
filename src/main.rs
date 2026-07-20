@@ -112,6 +112,7 @@ pub struct App {
 #[derive(Debug, Clone, Default)]
 pub struct CompressionResult {
     pub file_index: usize,
+    pub source_name: String,
     pub original_size: u64,
     pub new_size: u64,
     pub output_filename: Option<String>,
@@ -561,6 +562,7 @@ impl App {
                             });
                             let result = FileResult {
                                 file_index: idx,
+                                source_name: filename.clone(),
                                 original_size,
                                 new_size,
                                 output_filename: Some(output_filename),
@@ -572,6 +574,7 @@ impl App {
                         Err(e) => {
                             let result = FileResult {
                                 file_index: idx,
+                                source_name: filename.clone(),
                                 original_size,
                                 new_size: original_size,
                                 output_filename: None,
@@ -600,6 +603,7 @@ impl App {
 
                             let result = FileResult {
                                 file_index: idx,
+                                source_name: filename.clone(),
                                 original_size,
                                 new_size,
                                 output_filename: Some(output_filename),
@@ -611,6 +615,7 @@ impl App {
                         Err(e) => {
                             let result = FileResult {
                                 file_index: idx,
+                                source_name: filename.clone(),
                                 original_size,
                                 new_size: original_size,
                                 output_filename: None,
@@ -655,6 +660,7 @@ impl App {
                 CompressionEvent::FileCompleted(result) => {
                     self.compression_results.push(CompressionResult {
                         file_index: result.file_index,
+                        source_name: result.source_name.clone(),
                         original_size: result.original_size,
                         new_size: result.new_size,
                         output_filename: result.output_filename.clone(),
