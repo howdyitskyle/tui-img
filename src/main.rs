@@ -179,6 +179,28 @@ impl App {
             .unwrap_or(false)
     }
 
+    fn is_frames_directory(path: &Path) -> bool {
+        let name = match path.file_name().and_then(|s| s.to_str()) {
+            Some(n) => n,
+            None => return false,
+        };
+        if !name.contains("_frames") {
+            return false;
+        }
+        // Verify it contains at least one image file
+        std::fs::read_dir(path)
+            .map(|entries| {
+                entries.filter_map(|e| e.ok()).any(|e| {
+                    e.path()
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .map(|ext| matches!(ext, "png" | "gif" | "webp"))
+                        .unwrap_or(false)
+                })
+            })
+            .unwrap_or(false)
+    }
+
     pub fn load_directory(&mut self) {
         self.files.clear();
         self.queue.clear();
@@ -246,7 +268,12 @@ impl App {
             .into_iter()
             .map(|(path, is_dir)| {
                 let mut file = ImageFile::new_lightweight(path.clone(), is_dir);
-                if !is_dir {
+                if is_dir {
+                    #[cfg(feature = "animation")]
+                    {
+                        file.is_frames_dir = Self::is_frames_directory(&file.path);
+                    }
+                } else {
                     if let Some(info) = metadata_map.get(&path) {
                         file.dimensions = info.dimensions;
                         file.color_type = info.color_type.clone();
@@ -437,7 +464,17 @@ impl App {
         let total = self.queue.len();
         self.progress = Some((0, total, 0, "Starting...".to_string()));
 
-        let queue_copy: Vec<(usize, PathBuf, PathBuf, String, ImageSettings, u64, bool)> = self
+        #[allow(clippy::type_complexity)]
+        let queue_copy: Vec<(
+            usize,
+            PathBuf,
+            PathBuf,
+            String,
+            ImageSettings,
+            u64,
+            bool,
+            bool,
+        )> = self
             .queue
             .iter()
             .map(|&idx| {
@@ -460,6 +497,7 @@ impl App {
                     file.settings.clone(),
                     file.size,
                     file.is_animated,
+                    file.is_frames_dir,
                 )
             })
             .collect();
@@ -476,7 +514,16 @@ impl App {
 
             for (
                 i,
-                (idx, output_path, source_path, filename, settings, original_size, is_animated),
+                (
+                    idx,
+                    output_path,
+                    source_path,
+                    filename,
+                    settings,
+                    original_size,
+                    is_animated,
+                    is_frames_dir,
+                ),
             ) in queue_copy.into_iter().enumerate()
             {
                 let _ = tx.send(CompressionEvent::Stage(format!(
@@ -498,44 +545,80 @@ impl App {
                     selected: false,
                     exif_data: None,
                     is_animated,
+                    is_frames_dir,
                 };
 
-                match compress_image(&temp_file, &output_path, global_format) {
-                    Ok((new_size, output_filename)) => {
-                        let _ = tx.send(CompressionEvent::Stage(format!(
-                            "Compressed {}",
-                            truncate_str(&filename, 30)
-                        )));
-                        let _ = tx.send(CompressionEvent::Progress {
-                            current: i + 1,
-                            total: queue_total,
-                            filename: filename.clone(),
-                            sub_progress: 100,
-                        });
-
-                        let savings = original_size.saturating_sub(new_size);
-                        total_saved += savings;
-
-                        let result = FileResult {
-                            file_index: idx,
-                            original_size,
-                            new_size,
-                            output_filename: Some(output_filename),
-                            error: None,
-                        };
-                        results.push(result.clone());
-                        let _ = tx.send(CompressionEvent::FileCompleted(result));
+                if is_frames_dir {
+                    match compression::assemble_frames(&temp_file, &output_path, global_format) {
+                        Ok((new_size, output_filename)) => {
+                            total_saved =
+                                total_saved.saturating_add(original_size.saturating_sub(new_size));
+                            let _ = tx.send(CompressionEvent::Progress {
+                                current: i + 1,
+                                total: queue_total,
+                                filename: output_filename.clone(),
+                                sub_progress: 100,
+                            });
+                            let result = FileResult {
+                                file_index: idx,
+                                original_size,
+                                new_size,
+                                output_filename: Some(output_filename),
+                                error: None,
+                            };
+                            results.push(result.clone());
+                            let _ = tx.send(CompressionEvent::FileCompleted(result));
+                        }
+                        Err(e) => {
+                            let result = FileResult {
+                                file_index: idx,
+                                original_size,
+                                new_size: original_size,
+                                output_filename: None,
+                                error: Some(e.to_string()),
+                            };
+                            results.push(result.clone());
+                            let _ = tx.send(CompressionEvent::FileCompleted(result));
+                        }
                     }
-                    Err(e) => {
-                        let result = FileResult {
-                            file_index: idx,
-                            original_size,
-                            new_size: original_size,
-                            output_filename: None,
-                            error: Some(e.to_string()),
-                        };
-                        results.push(result.clone());
-                        let _ = tx.send(CompressionEvent::FileCompleted(result));
+                } else {
+                    match compress_image(&temp_file, &output_path, global_format) {
+                        Ok((new_size, output_filename)) => {
+                            let _ = tx.send(CompressionEvent::Stage(format!(
+                                "Compressed {}",
+                                truncate_str(&filename, 30)
+                            )));
+                            let _ = tx.send(CompressionEvent::Progress {
+                                current: i + 1,
+                                total: queue_total,
+                                filename: filename.clone(),
+                                sub_progress: 100,
+                            });
+
+                            let savings = original_size.saturating_sub(new_size);
+                            total_saved += savings;
+
+                            let result = FileResult {
+                                file_index: idx,
+                                original_size,
+                                new_size,
+                                output_filename: Some(output_filename),
+                                error: None,
+                            };
+                            results.push(result.clone());
+                            let _ = tx.send(CompressionEvent::FileCompleted(result));
+                        }
+                        Err(e) => {
+                            let result = FileResult {
+                                file_index: idx,
+                                original_size,
+                                new_size: original_size,
+                                output_filename: None,
+                                error: Some(e.to_string()),
+                            };
+                            results.push(result.clone());
+                            let _ = tx.send(CompressionEvent::FileCompleted(result));
+                        }
                     }
                 }
             }
@@ -810,6 +893,7 @@ fn handle_input(
                 let from_quality = show_quality_setting(format, file);
                 let from_webp = show_webp_setting(format);
                 let from_progressive = show_progressive_setting(format);
+                let from_frames = file.map(|f| f.is_frames_dir).unwrap_or(false);
 
                 app.setting_option = match app.setting_option {
                     SettingOption::Quality => {
@@ -831,10 +915,24 @@ fn handle_input(
                     SettingOption::Exif => SettingOption::Color,
                     SettingOption::Format => SettingOption::ExtractFrames,
                     SettingOption::WebpLossless => SettingOption::Format,
-                    SettingOption::Progressive => SettingOption::Exif,
-                    SettingOption::PngCompress => SettingOption::Progressive,
+                    SettingOption::Progressive => {
+                        if from_frames {
+                            SettingOption::Color
+                        } else {
+                            SettingOption::Exif
+                        }
+                    }
+                    SettingOption::PngCompress => {
+                        if from_frames {
+                            SettingOption::Color
+                        } else {
+                            SettingOption::Progressive
+                        }
+                    }
                     SettingOption::MaxWidth => {
-                        if from_progressive {
+                        if from_frames {
+                            SettingOption::Color
+                        } else if from_progressive {
                             SettingOption::PngCompress
                         } else {
                             SettingOption::Exif
@@ -874,6 +972,7 @@ fn handle_input(
                 let from_quality = show_quality_setting(format, file);
                 let from_webp = show_webp_setting(format);
                 let from_progressive = show_progressive_setting(format);
+                let from_frames = file.map(|f| f.is_frames_dir).unwrap_or(false);
 
                 app.setting_option = match app.setting_option {
                     SettingOption::Format => {
@@ -893,15 +992,29 @@ fn handle_input(
                         }
                     }
                     SettingOption::Quality => SettingOption::Color,
-                    SettingOption::Color => SettingOption::Exif,
+                    SettingOption::Color => {
+                        if from_frames {
+                            SettingOption::MaxWidth
+                        } else {
+                            SettingOption::Exif
+                        }
+                    }
                     SettingOption::Exif => {
-                        if from_progressive {
+                        if from_frames {
+                            SettingOption::MaxWidth
+                        } else if from_progressive {
                             SettingOption::Progressive
                         } else {
                             SettingOption::MaxWidth
                         }
                     }
-                    SettingOption::Progressive => SettingOption::PngCompress,
+                    SettingOption::Progressive => {
+                        if from_frames {
+                            SettingOption::MaxWidth
+                        } else {
+                            SettingOption::PngCompress
+                        }
+                    }
                     SettingOption::PngCompress => SettingOption::MaxWidth,
                     SettingOption::MaxWidth => SettingOption::MaxHeight,
                     SettingOption::MaxHeight => SettingOption::Overwrite,

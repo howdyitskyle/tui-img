@@ -873,5 +873,111 @@ mod integration {
 
             let _ = fs::remove_dir_all(&temp_dir);
         }
+
+        #[test]
+        fn test_assemble_frames_to_gif() {
+            let temp_dir = std::env::temp_dir().join("tui_img_test_assemble_gif");
+            let _ = fs::remove_dir_all(&temp_dir);
+            fs::create_dir_all(&temp_dir).unwrap();
+
+            let input_path = temp_dir.join("test_animated.gif");
+            create_animated_gif(&input_path).unwrap();
+
+            let mut file = make_file(&input_path);
+            file.settings.extract_frames = true;
+
+            let _ = tui_img::compress_image(&file, &temp_dir.join("out.gif"), None)
+                .expect("Extract frames should succeed");
+
+            let frames_dir = temp_dir.join("test_animated_frames");
+            assert!(frames_dir.exists(), "Frames directory should exist");
+
+            let frames_file = tui_img::ImageFile {
+                path: frames_dir.clone(),
+                name: "test_animated_frames".to_string(),
+                is_dir: true,
+                is_parent: false,
+                is_frames_dir: true,
+                size: 0,
+                dimensions: None,
+                color_type: None,
+                needs_exif: false,
+                settings: tui_img::ImageSettings::default(),
+                queued: false,
+                selected: false,
+                exif_data: None,
+                is_animated: false,
+            };
+
+            let output_path = temp_dir.join("assembled.gif");
+            let result = tui_img::assemble_frames(&frames_file, &output_path, None);
+            assert!(
+                result.is_ok(),
+                "Assemble frames to GIF should succeed: {:?}",
+                result.err()
+            );
+
+            let (size, name) = result.unwrap();
+            assert!(size > 0, "Assembled GIF should have content");
+            let assembled = temp_dir.join(&name);
+            assert!(assembled.exists(), "Assembled GIF file should exist");
+
+            let _ = fs::remove_dir_all(&temp_dir);
+        }
+
+        #[test]
+        fn test_assemble_frames_as_webp() {
+            let temp_dir = std::env::temp_dir().join("tui_img_test_assemble_webp");
+            let _ = fs::remove_dir_all(&temp_dir);
+            fs::create_dir_all(&temp_dir).unwrap();
+
+            let input_path = temp_dir.join("test_animated.gif");
+            create_animated_gif(&input_path).unwrap();
+
+            let mut file = make_file(&input_path);
+            file.settings.extract_frames = true;
+
+            let _ = tui_img::compress_image(&file, &temp_dir.join("out.gif"), None)
+                .expect("Extract frames should succeed");
+
+            let frames_dir = temp_dir.join("test_animated_frames");
+            assert!(frames_dir.exists(), "Frames directory should exist");
+
+            let frames_file = tui_img::ImageFile {
+                path: frames_dir,
+                name: "test_animated_frames".to_string(),
+                is_dir: true,
+                is_parent: false,
+                is_frames_dir: true,
+                size: 0,
+                dimensions: None,
+                color_type: None,
+                needs_exif: false,
+                settings: tui_img::ImageSettings::default(),
+                queued: false,
+                selected: false,
+                exif_data: None,
+                is_animated: false,
+            };
+
+            let output_path = temp_dir.join("assembled.webp");
+            let result = tui_img::assemble_frames(
+                &frames_file,
+                &output_path,
+                Some(tui_img::OutputFormat::Webp),
+            );
+            assert!(
+                result.is_ok(),
+                "Assemble frames to WebP should succeed: {:?}",
+                result.err()
+            );
+
+            let (size, name) = result.unwrap();
+            assert!(size > 0, "Assembled WebP should have content");
+            let assembled = temp_dir.join(&name);
+            assert!(assembled.exists(), "Assembled WebP file should exist");
+
+            let _ = fs::remove_dir_all(&temp_dir);
+        }
     }
 }

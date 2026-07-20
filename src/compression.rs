@@ -671,6 +671,62 @@ fn resolve_output_path(output_path: &Path, ext: &str, settings: &ImageSettings) 
 }
 
 #[cfg(feature = "animation")]
+pub fn assemble_frames(
+    file: &ImageFile,
+    output_path: &Path,
+    global_format: Option<OutputFormat>,
+) -> Result<(u64, String)> {
+    let frames_dir = &file.path;
+    if !frames_dir.is_dir() {
+        anyhow::bail!("Frames path is not a directory: {:?}", frames_dir);
+    }
+
+    let (frame_paths, delays) = collect_frame_files(frames_dir)?;
+    if frame_paths.is_empty() {
+        anyhow::bail!("No frame files found in {:?}", frames_dir);
+    }
+
+    let target_format = global_format.unwrap_or(file.settings.output_format);
+    let resolved_format = match target_format {
+        OutputFormat::Png => OutputFormat::Png,
+        OutputFormat::Gif => OutputFormat::Gif,
+        OutputFormat::Webp => OutputFormat::Webp,
+        _ => OutputFormat::Gif,
+    };
+
+    let temp_dir = std::env::temp_dir().join(format!(
+        "tui_img_assembly_{}_{}",
+        std::process::id(),
+        rand_suffix()
+    ));
+    let _ = fs::create_dir_all(&temp_dir);
+    let result = (|| -> Result<(u64, String)> {
+        let mut processed_paths: Vec<PathBuf> = Vec::new();
+        for fp in &frame_paths {
+            let img = image::open(fp).context("Failed to open frame for assembly")?;
+            let processed = apply_processing(img, &file.settings);
+            let out_name = fp.file_stem().unwrap_or_default();
+            let out_path = temp_dir.join(out_name).with_extension("png");
+            processed.save(&out_path)?;
+            processed_paths.push(out_path);
+        }
+
+        let out_ext = resolved_format.extension().to_string();
+        let final_output_path = resolve_output_path(output_path, &out_ext, &file.settings);
+        ensure_dir_exists(&final_output_path)?;
+
+        match resolved_format {
+            OutputFormat::Gif => assemble_gif(&processed_paths, &final_output_path, &delays),
+            OutputFormat::Webp => assemble_webp(&processed_paths, &final_output_path, &delays),
+            OutputFormat::Png => assemble_apng(&processed_paths, &final_output_path, &delays),
+            _ => anyhow::bail!("Unsupported assembly format"),
+        }
+    })();
+    let _ = fs::remove_dir_all(&temp_dir);
+    result
+}
+
+#[cfg(feature = "animation")]
 fn convert_animated(
     file: &ImageFile,
     output_path: &Path,

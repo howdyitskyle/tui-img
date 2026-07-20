@@ -212,6 +212,7 @@ pub struct ImageFile {
     pub selected: bool,
     pub exif_data: Option<ExifData>,
     pub is_animated: bool,
+    pub is_frames_dir: bool,
 }
 
 impl ImageFile {
@@ -230,6 +231,7 @@ impl ImageFile {
             selected: false,
             exif_data: None,
             is_animated: false,
+            is_frames_dir: false,
         }
     }
 
@@ -290,6 +292,7 @@ impl ImageFile {
             selected: false,
             exif_data: None,
             is_animated: false,
+            is_frames_dir: false,
         }
     }
 

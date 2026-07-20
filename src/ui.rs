@@ -167,7 +167,64 @@ pub fn render_file_list(f: &mut Frame, area: Rect, app: &mut crate::App) {
                 Style::new().white()
             };
 
-            if file.is_parent || file.is_dir {
+            if file.is_frames_dir {
+                let icon = "⏺";
+                let name = file.name.clone();
+                let queue = if file.queued { "[Q]" } else { "" };
+                let display_name = format!("{}{}", name, queue);
+
+                // Count frame files in the directory
+                let frame_count = std::fs::read_dir(&file.path)
+                    .map(|entries| {
+                        entries
+                            .filter_map(|e| e.ok())
+                            .filter(|e| {
+                                e.path()
+                                    .extension()
+                                    .and_then(|ext| ext.to_str())
+                                    .map(|ext| matches!(ext, "png" | "gif" | "webp"))
+                                    .unwrap_or(false)
+                            })
+                            .count()
+                    })
+                    .unwrap_or(0);
+
+                let dims = format!("{} frames", frame_count);
+
+                let base_style = if selected {
+                    Style::new().black().on_cyan()
+                } else if file.queued {
+                    Style::new().green()
+                } else {
+                    Style::new().magenta()
+                };
+                let info_style = if selected {
+                    Style::new().black()
+                } else {
+                    Style::new().dark_gray()
+                };
+
+                let line = Line::from(vec![
+                    Span::from(format!("{}  ", icon)),
+                    Span::from(format!("{:<width$}", display_name, width = name_width)),
+                    Span::from("  "),
+                    Span::from(format!("{:>width$}", dims, width = min_dims_width))
+                        .style(info_style),
+                    Span::from("  "),
+                    Span::from(format!("{:>width$}", "", width = min_mp_width)).style(info_style),
+                    Span::from("  "),
+                    Span::from(format!("{:>width$}", "", width = min_size_width)).style(info_style),
+                    Span::from("  "),
+                    Span::from(format!("{:>width$}", "", width = min_color_width))
+                        .style(info_style),
+                    Span::from("  "),
+                    Span::from(format!("{:<width$}", "", width = min_exif_width)).style(info_style),
+                    Span::from("  "),
+                    Span::from(format!("{:>width$}", "", width = min_type_width)).style(info_style),
+                ])
+                .style(base_style);
+                ListItem::new(line)
+            } else if file.is_parent || file.is_dir {
                 let icon = if file.is_parent { "<" } else { ">" };
                 let name = if file.is_parent {
                     "..".to_string()
@@ -503,14 +560,18 @@ pub fn render_settings_panel(f: &mut Frame, area: Rect, app: &crate::App) {
         is_c,
         is_settings_focused,
     ));
-    settings_lines.push(opt_no_hint(
-        "EXIF".into(),
-        exif.into(),
-        is_e,
-        is_settings_focused,
-    ));
+    let from_frames = file.map(|f| f.is_frames_dir).unwrap_or(false);
 
-    if format == OutputFormat::Png {
+    if !from_frames {
+        settings_lines.push(opt_no_hint(
+            "EXIF".into(),
+            exif.into(),
+            is_e,
+            is_settings_focused,
+        ));
+    }
+
+    if format == OutputFormat::Png && !from_frames {
         settings_lines.push(separator());
         settings_lines.push(opt_no_hint(
             "Progressive".into(),
