@@ -63,6 +63,9 @@ pub fn compress_image(
 ) -> Result<(u64, String)> {
     #[cfg(feature = "animation")]
     if file.is_animated {
+        if file.settings.extract_frames {
+            return extract_frames_to_output(file, global_format);
+        }
         let target_format = global_format.unwrap_or(file.settings.output_format);
         let source_ext = file.extension().unwrap_or_default().to_lowercase();
         let resolved_format = if target_format == OutputFormat::Same {
@@ -386,6 +389,7 @@ pub fn compress_image_to_path(
         overwrite: false,
         backup: false,
         output_directory: None,
+        extract_frames: false,
     };
 
     ensure_dir_exists(output_path)?;
@@ -434,6 +438,63 @@ fn extract_frames_to_path(
 
     let output_name = format!("{}/", frames_dir.display());
     Ok((frame_count, output_name))
+}
+
+#[cfg(feature = "animation")]
+fn extract_frames_to_output(
+    file: &ImageFile,
+    global_format: Option<OutputFormat>,
+) -> Result<(u64, String)> {
+    let stem = file.path.file_stem().unwrap_or_default().to_string_lossy();
+    let parent = file.path.parent().unwrap_or(Path::new("."));
+    let source_ext = file.extension().unwrap_or_default().to_lowercase();
+
+    let target_format = global_format.unwrap_or(file.settings.output_format);
+    let output_ext = match target_format {
+        OutputFormat::Same => file.extension().unwrap_or_else(|| "png".to_string()),
+        _ => target_format.extension().to_string(),
+    };
+
+    let frames_dir = get_unique_frames_dir(parent, &stem);
+    ensure_dir_exists(&frames_dir.join("placeholder"))?;
+
+    let file_vec = fs::read(&file.path).context("Failed to read file for frame extraction")?;
+
+    let _count = match source_ext.as_str() {
+        "gif" => extract_gif_frames(&file_vec, &frames_dir, &output_ext, &file.settings)?,
+        "webp" => extract_webp_frames(&file_vec, &frames_dir, &output_ext, &file.settings)?,
+        "png" => extract_apng_frames(&file_vec, &frames_dir, &output_ext, &file.settings)?,
+        _ => anyhow::bail!("Frame extraction not supported for .{}", source_ext),
+    };
+
+    let total_bytes: u64 = fs::read_dir(&frames_dir)?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_file())
+        .filter_map(|e| e.metadata().ok())
+        .map(|m| m.len())
+        .sum();
+
+    let output_name = frames_dir
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("frames")
+        .to_string();
+    Ok((total_bytes, output_name))
+}
+
+#[cfg(feature = "animation")]
+fn get_unique_frames_dir(parent: &Path, stem: &str) -> PathBuf {
+    let base = parent.join(format!("{}_frames", stem));
+    if !base.exists() {
+        return base;
+    }
+    for i in 2.. {
+        let candidate = parent.join(format!("{}_frames_{}", stem, i));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    base
 }
 
 #[cfg(feature = "animation")]

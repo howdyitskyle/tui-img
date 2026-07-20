@@ -770,5 +770,106 @@ mod integration {
 
             let _ = fs::remove_dir_all(&temp_dir);
         }
+
+        #[test]
+        fn test_animated_gif_extract_frames() {
+            let temp_dir = std::env::temp_dir().join("tui_img_test_anim_extract");
+            let _ = fs::remove_dir_all(&temp_dir);
+            fs::create_dir_all(&temp_dir).unwrap();
+
+            let input_path = temp_dir.join("test_animated.gif");
+            create_animated_gif(&input_path).unwrap();
+
+            let mut file = make_file(&input_path);
+            assert!(
+                file.is_animated,
+                "Animated GIF should be detected as animated"
+            );
+            file.settings.extract_frames = true;
+
+            let output_path = temp_dir.join("output.gif");
+            let result = tui_img::compress_image(&file, &output_path, None);
+            assert!(
+                result.is_ok(),
+                "Animated GIF extract frames should succeed: {:?}",
+                result.err()
+            );
+
+            let (_, output_name) = result.unwrap();
+            let frames_dir = temp_dir.join("test_animated_frames");
+            assert!(
+                frames_dir.exists(),
+                "Frames directory should exist at {:?}",
+                frames_dir
+            );
+
+            let entries: Vec<_> = fs::read_dir(&frames_dir).unwrap().collect();
+            assert_eq!(entries.len(), 4, "Should have 3 frames + delays.txt");
+
+            let frame_files: Vec<_> = entries
+                .iter()
+                .filter_map(|e| e.as_ref().ok())
+                .filter(|e| {
+                    e.path()
+                        .extension()
+                        .map(|ext| ext == "gif")
+                        .unwrap_or(false)
+                })
+                .collect();
+            assert_eq!(frame_files.len(), 3, "Should have 3 GIF frame files");
+
+            let delays_path = frames_dir.join("delays.txt");
+            assert!(delays_path.exists(), "delays.txt should exist");
+            let delays = std::fs::read_to_string(delays_path).unwrap();
+            let delay_values: Vec<u32> =
+                delays.lines().filter_map(|l| l.trim().parse().ok()).collect();
+            assert_eq!(delay_values.len(), 3, "Should have 3 delays");
+
+            let _ = fs::remove_dir_all(&temp_dir);
+        }
+
+        #[test]
+        fn test_animated_gif_extract_frames_as_png() {
+            let temp_dir = std::env::temp_dir().join("tui_img_test_anim_extract_png");
+            let _ = fs::remove_dir_all(&temp_dir);
+            fs::create_dir_all(&temp_dir).unwrap();
+
+            let input_path = temp_dir.join("test_animated.gif");
+            create_animated_gif(&input_path).unwrap();
+
+            let mut file = make_file(&input_path);
+            assert!(
+                file.is_animated,
+                "Animated GIF should be detected as animated"
+            );
+            file.settings.extract_frames = true;
+
+            let output_path = temp_dir.join("output.png");
+            let result =
+                tui_img::compress_image(&file, &output_path, Some(tui_img::OutputFormat::Png));
+            assert!(
+                result.is_ok(),
+                "Animated GIF extract frames as PNG should succeed: {:?}",
+                result.err()
+            );
+
+            let frames_dir = temp_dir.join("test_animated_frames");
+            assert!(frames_dir.exists(), "Frames directory should exist");
+
+            let entries: Vec<_> = fs::read_dir(&frames_dir).unwrap().collect();
+            let frame_files: Vec<_> = entries
+                .iter()
+                .filter_map(|e| e.as_ref().ok())
+                .filter(|e| {
+                    e.path()
+                        .extension()
+                        .map(|ext| ext == "png")
+                        .unwrap_or(false)
+                })
+                .collect();
+            assert_eq!(frame_files.len(), 3, "Should have 3 PNG frame files");
+
+            let _ = fs::remove_dir_all(&temp_dir);
+        }
     }
 }

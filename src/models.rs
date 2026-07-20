@@ -33,6 +33,7 @@ pub struct ImageSettings {
     pub webp_lossless: bool,
     pub overwrite: bool,
     pub backup: bool,
+    pub extract_frames: bool,
 }
 
 impl Default for ImageSettings {
@@ -50,6 +51,7 @@ impl Default for ImageSettings {
             webp_lossless: false,
             overwrite: false,
             backup: false,
+            extract_frames: false,
         }
     }
 }

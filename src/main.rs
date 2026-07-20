@@ -74,6 +74,7 @@ pub enum SettingOption {
     Overwrite,
     Backup,
     OutputDir,
+    ExtractFrames,
 }
 
 pub struct App {
@@ -828,7 +829,7 @@ fn handle_input(
                         }
                     }
                     SettingOption::Exif => SettingOption::Color,
-                    SettingOption::Format => SettingOption::OutputDir,
+                    SettingOption::Format => SettingOption::ExtractFrames,
                     SettingOption::WebpLossless => SettingOption::Format,
                     SettingOption::Progressive => SettingOption::Exif,
                     SettingOption::PngCompress => SettingOption::Progressive,
@@ -842,6 +843,7 @@ fn handle_input(
                     SettingOption::MaxHeight => SettingOption::MaxWidth,
                     SettingOption::Overwrite => SettingOption::MaxHeight,
                     SettingOption::Backup => SettingOption::Overwrite,
+                    SettingOption::ExtractFrames => SettingOption::OutputDir,
                     SettingOption::OutputDir => SettingOption::Backup,
                 };
             }
@@ -905,7 +907,8 @@ fn handle_input(
                     SettingOption::MaxHeight => SettingOption::Overwrite,
                     SettingOption::Overwrite => SettingOption::Backup,
                     SettingOption::Backup => SettingOption::OutputDir,
-                    SettingOption::OutputDir => SettingOption::Format,
+                    SettingOption::OutputDir => SettingOption::ExtractFrames,
+                    SettingOption::ExtractFrames => SettingOption::Format,
                 };
             }
         }
@@ -1040,6 +1043,11 @@ fn handle_input(
                         file.settings.backup = !file.settings.backup;
                     }
                 }
+                SettingOption::ExtractFrames => {
+                    if let Some(file) = app.selected_file_mut() {
+                        file.settings.extract_frames = !file.settings.extract_frames;
+                    }
+                }
                 SettingOption::OutputDir => {
                     app.input_mode = true;
                     app.input_target = SettingOption::OutputDir;
@@ -1132,6 +1140,11 @@ fn handle_input(
                 SettingOption::Backup => {
                     if let Some(file) = app.selected_file_mut() {
                         file.settings.backup = !file.settings.backup;
+                    }
+                }
+                SettingOption::ExtractFrames => {
+                    if let Some(file) = app.selected_file_mut() {
+                        file.settings.extract_frames = !file.settings.extract_frames;
                     }
                 }
                 SettingOption::OutputDir => {
@@ -2062,7 +2075,8 @@ mod tests {
                 SettingOption::MaxHeight => app.setting_option = SettingOption::Overwrite,
                 SettingOption::Overwrite => app.setting_option = SettingOption::Backup,
                 SettingOption::Backup => app.setting_option = SettingOption::OutputDir,
-                SettingOption::OutputDir => app.setting_option = SettingOption::Format,
+                SettingOption::OutputDir => app.setting_option = SettingOption::ExtractFrames,
+                SettingOption::ExtractFrames => app.setting_option = SettingOption::Format,
             }
         }
         visited
@@ -2096,7 +2110,8 @@ mod tests {
             let from_progressive = format == Some(OutputFormat::Png);
 
             match app.setting_option {
-                SettingOption::Format => app.setting_option = SettingOption::OutputDir,
+                SettingOption::Format => app.setting_option = SettingOption::ExtractFrames,
+                SettingOption::ExtractFrames => app.setting_option = SettingOption::OutputDir,
                 SettingOption::OutputDir => app.setting_option = SettingOption::Backup,
                 SettingOption::Backup => app.setting_option = SettingOption::Overwrite,
                 SettingOption::Overwrite => app.setting_option = SettingOption::MaxHeight,

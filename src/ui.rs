@@ -351,6 +351,9 @@ pub fn render_settings_panel(f: &mut Frame, area: Rect, app: &crate::App) {
     let backup = file
         .map(|f| if f.settings.backup { "Yes" } else { "No" })
         .unwrap_or("No");
+    let extract_frames = file
+        .map(|f| if f.settings.extract_frames { "On" } else { "Off" })
+        .unwrap_or("Off");
 
     fn opt_no_hint(
         label: String,
@@ -401,6 +404,7 @@ pub fn render_settings_panel(f: &mut Frame, area: Rect, app: &crate::App) {
     let is_ow = is_settings_focused && app.setting_option == crate::SettingOption::Overwrite;
     let is_bk = is_settings_focused && app.setting_option == crate::SettingOption::Backup;
     let is_dir = is_settings_focused && app.setting_option == crate::SettingOption::OutputDir;
+    let is_ex = is_settings_focused && app.setting_option == crate::SettingOption::ExtractFrames;
 
     let global_format = app
         .global_output_format
@@ -551,6 +555,16 @@ pub fn render_settings_panel(f: &mut Frame, area: Rect, app: &crate::App) {
         is_dir,
         is_settings_focused,
     ));
+
+    if file.map(|f| f.is_animated).unwrap_or(false) {
+        settings_lines.push(separator());
+        settings_lines.push(opt_no_hint(
+            "Extract Frames".into(),
+            extract_frames.into(),
+            is_ex,
+            is_settings_focused,
+        ));
+    }
 
     if app.input_mode {
         let input_line = Line::from(vec![
