@@ -7,7 +7,7 @@ cargo run       # Run
 cargo check     # Type-check
 cargo test      # Run 65 tests (56 unit + 9 integration)
 cargo clippy    # Lint
-cargo test --features animation  # Run 75 tests (56 unit + 19 integration)
+cargo test --features animation  # Run 80 tests (56 unit + 24 integration)
 cargo test --features avif       # Include AVIF tests (requires NASM)
 ```
 
@@ -32,9 +32,9 @@ src/
 - `gif 0.14` - GIF animation decoding (feature-gated behind `animation`)
 
 ## Release
-- **Version**: 1.0.8 (published to crates.io)
+- **Version**: 1.1.0 (published to crates.io)
 - **Release workflow**: `.github/workflows/release.yml`
-  - Triggers on version tags (e.g., `v1.0.5`)
+  - Triggers on version tags (e.g., `v1.1.0`)
   - Builds binaries for Linux
   - Publishes to crates.io
   - Creates GitHub release automatically
@@ -48,20 +48,25 @@ src/
 - File list auto-refreshes after compression when output dir = Same as source
 - Image Settings panel visible when focused (not just when file selected)
 - Image Settings navigation skips irrelevant options based on format:
-  - JPEG: Format → Quality → Color → EXIF → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
-  - WebP: Format → WebP (Lossy/Lossless) → Quality (only if Lossy) → Color → EXIF → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
-  - PNG: Format → Quality → Color → EXIF → Progressive → PNG Comp → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
-  - AVIF: Format → Quality → Color → EXIF → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
-  - Other (GIF/TIFF/BMP/TGA/Same): Format → Color → EXIF → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
+  - JPEG: Format → Quality → Color → EXIF → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → ExtractFrames → Format
+  - WebP: Format → WebP → Quality → Color → EXIF → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → ExtractFrames → Format
+  - PNG: Format → Quality → Color → EXIF → Progressive → PNG Comp → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → ExtractFrames → Format
+  - AVIF: Format → Quality → Color → EXIF → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → ExtractFrames → Format
+  - Other (GIF/TIFF/BMP/TGA/Same): Format → Color → EXIF → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → ExtractFrames → Format
+  - Frames Directory: Format → WebP → Quality → Color → MaxWidth → MaxHeight → Overwrite → Backup → OutputDir → Format
 - Animation (feature-gated behind `animation`): animated files auto-detect and convert
   - Animated → GIF/WebP: extracts frames, processes each, assembles into target format
   - Animated → Same (GIF/WebP source): reassembles into source format
   - Animated → Same (APNG source): copies original file
   - Animated → PNG/JPEG/etc: extracts first frame only as single static file
   - Static files compress normally; no user action needed for animation
+- Extract Frames setting (at bottom of Image Settings): extracts frames to `{filename}_frames/` directory
+- Assemble Frames: `_frames` directories show as `⏺` entries, queuable with Space, compressed with `c`
+  - Reads `delays.txt` for frame timing, applies resize/color settings, assembles into GIF/WebP/APNG
+  - `_frames` dirs remain enterable, settings skip EXIF/Progressive/PNGComp/ExtractFrames
 
 ## Testing
-- 73 tests run via `cargo test` (56 unit + 17 integration)
+- 80 tests run via `cargo test --features animation` (56 unit + 24 integration)
 - Integration tests verify JPEG/PNG/WebP/GIF/TIFF/BMP/TGA/AVIF compression and format conversion
 - AVIF tests require `--features avif` and NASM installed
 - Animation tests require `--features animation`

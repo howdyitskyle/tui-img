@@ -18,6 +18,8 @@ A powerful terminal-based image batch compression and conversion tool built with
 - **EXIF Management** - Keep or remove image metadata
 - **Resize Images** - Set maximum width/height with Lanczos3 resampling
 - **Animation Support** - Automatic conversion of animated GIF, WebP, and APNG files (feature-gated behind `animation`)
+- **Extract Frames** - Extract animated frames as individual image files with `Extract Frames` toggle (feature-gated behind `animation`)
+- **Assemble Frames** - Reassemble extracted frame directories back into animated GIF, WebP, or APNG (feature-gated behind `animation`)
 - **AVIF Support** - High-efficiency AVIF encoding with adjustable quality (feature-gated behind `avif`, requires NASM)
 - **Virtual Scrolling** - Handle directories with thousands of files
 - **Metadata Caching** - Fast directory navigation with cached metadata
@@ -114,6 +116,7 @@ Navigate to the Settings column and use:
 | Output | File behavior | Overwrite, New file |
 | Backup | Create backup first | Yes, No |
 | Output Dir | Custom output directory | Path (supports `~` expansion) |
+| Extract Frames | Extract animated frames to directory | On, Off (shown only for animated files) |
 
 ### Compression
 
@@ -136,6 +139,19 @@ Animated files (GIF, WebP, APNG) are automatically detected and converted based 
 - **Animated → Same format**: Animation is preserved in the source format (GIF→GIF, WebP→WebP). APNG→Same copies the original file
 - **Animated → PNG/JPEG/etc**: First frame only is extracted as a single static file
 - **Static files**: Compressed normally with no animation handling
+
+### Extract Frames
+
+When an animated file is selected, the **Extract Frames** setting appears at the bottom of the Image Settings panel:
+- **On**: Frames are extracted as individual image files to a `{filename}_frames/` directory next to the source. Frames use the selected output format
+- **Off** (default): Animated files are converted to animated output formats normally
+
+### Assemble Frames
+
+Extracted `_frames` directories appear in the file list with a `⏺` marker. They can be queued with `Space` and compressed with `c` to reassemble into an animated file:
+- Target format (GIF, WebP, or APNG), color space, and resize settings are applied during assembly
+- Frame timing from the original animation is preserved
+- `_frames` directories remain enterable for inspection
 
 ## Performance
 
