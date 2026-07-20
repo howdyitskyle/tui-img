@@ -18,6 +18,7 @@ A powerful terminal-based image batch compression and conversion tool built with
 - **EXIF Management** - Keep or remove image metadata
 - **Resize Images** - Set maximum width/height with Lanczos3 resampling
 - **Animation Support** - Automatic conversion of animated GIF, WebP, and APNG files (feature-gated behind `animation`)
+- **AVIF Support** - High-efficiency AVIF encoding with adjustable quality (feature-gated behind `avif`, requires NASM)
 - **Virtual Scrolling** - Handle directories with thousands of files
 - **Metadata Caching** - Fast directory navigation with cached metadata
 - **Parallel Processing** - Uses rayon for parallel EXIF loading and directory scanning
@@ -56,6 +57,15 @@ cargo build --release
 git clone https://github.com/howdyitskyle/tui-img.git
 cd tui-img
 cargo build --release --features animation
+./target/release/tui-img
+```
+
+### From Source with AVIF Support
+
+```bash
+git clone https://github.com/howdyitskyle/tui-img.git
+cd tui-img
+cargo build --release --features avif
 ./target/release/tui-img
 ```
 
@@ -155,6 +165,8 @@ src/
 ```bash
 cargo test
 cargo test --features animation  # Include animation tests
+cargo test --features avif       # Include AVIF tests (requires NASM)
+cargo test --all-features        # Run all tests
 ```
 
 ## License

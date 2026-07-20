@@ -18,12 +18,12 @@ use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+#[cfg(feature = "animation")]
+use models::detect_animation;
 use models::{
     bytes_to_human, truncate_str, CachedImageInfo, ColorSpace, ExifData, ImageFile, ImageSettings,
     OutputFormat,
 };
-#[cfg(feature = "animation")]
-use models::detect_animation;
 use ratatui::prelude::Span;
 use ratatui::Terminal;
 
@@ -473,8 +473,10 @@ impl App {
             let mut total_saved: u64 = 0;
             let queue_total = queue_copy.len();
 
-            for (i, (idx, output_path, source_path, filename, settings, original_size, is_animated)) in
-                queue_copy.into_iter().enumerate()
+            for (
+                i,
+                (idx, output_path, source_path, filename, settings, original_size, is_animated),
+            ) in queue_copy.into_iter().enumerate()
             {
                 let _ = tx.send(CompressionEvent::Stage(format!(
                     "Converting {}...",

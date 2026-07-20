@@ -439,17 +439,16 @@ pub fn detect_animation(path: &Path) -> bool {
         }
         Some("webp") => {
             let decoder = match image::codecs::webp::WebPDecoder::new(io::Cursor::new(&mmap[..])) {
-                    Ok(d) => d,
-                    Err(_) => return false,
-                };
+                Ok(d) => d,
+                Err(_) => return false,
+            };
             decoder.has_animation()
         }
         Some("png") => {
-            let decoder =
-                match image::codecs::png::PngDecoder::new(io::Cursor::new(&mmap[..])) {
-                    Ok(d) => d,
-                    Err(_) => return false,
-                };
+            let decoder = match image::codecs::png::PngDecoder::new(io::Cursor::new(&mmap[..])) {
+                Ok(d) => d,
+                Err(_) => return false,
+            };
             decoder.is_apng().unwrap_or(false)
         }
         _ => false,

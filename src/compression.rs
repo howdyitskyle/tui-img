@@ -348,7 +348,11 @@ pub fn compress_avif(
         .chunks_exact(4)
         .map(|c| RGBA8::new(c[0], c[1], c[2], c[3]))
         .collect();
-    let img_ref = Img::new(pixels.as_slice(), img.width() as usize, img.height() as usize);
+    let img_ref = Img::new(
+        pixels.as_slice(),
+        img.width() as usize,
+        img.height() as usize,
+    );
 
     let quality = settings.quality as f32;
     let encoder = Encoder::new().with_quality(quality);
@@ -408,11 +412,7 @@ fn extract_frames_to_path(
     base_dir: &Path,
     global_format: Option<OutputFormat>,
 ) -> Result<(u64, String)> {
-    let stem = file
-        .path
-        .file_stem()
-        .unwrap_or_default()
-        .to_string_lossy();
+    let stem = file.path.file_stem().unwrap_or_default().to_string_lossy();
     let frames_dir = base_dir.join(format!("{}_frames", stem));
     ensure_dir_exists(&frames_dir.join("placeholder"))?;
 
@@ -451,7 +451,10 @@ fn extract_gif_frames(
 
     let mut frame_idx: u32 = 0;
     let mut delays: Vec<u32> = Vec::new();
-    while let Some(frame) = decoder.read_next_frame().context("Failed to read GIF frame")? {
+    while let Some(frame) = decoder
+        .read_next_frame()
+        .context("Failed to read GIF frame")?
+    {
         delays.push(frame.delay as u32 * 10);
         frame_idx += 1;
         let rgba_img = image::RgbaImage::from_raw(
@@ -478,8 +481,7 @@ fn extract_webp_frames(
     settings: &ImageSettings,
 ) -> Result<u64> {
     let cursor = std::io::Cursor::new(data);
-    let decoder =
-        image::codecs::webp::WebPDecoder::new(cursor).context("Failed to decode WebP")?;
+    let decoder = image::codecs::webp::WebPDecoder::new(cursor).context("Failed to decode WebP")?;
     let frames: Vec<image::Frame> = decoder
         .into_frames()
         .collect_frames()
@@ -487,9 +489,8 @@ fn extract_webp_frames(
 
     if frames.is_empty() {
         let cursor = std::io::Cursor::new(data);
-        let img =
-            image::DynamicImage::from_decoder(image::codecs::webp::WebPDecoder::new(cursor)?)
-                .context("Failed to decode WebP as static image")?;
+        let img = image::DynamicImage::from_decoder(image::codecs::webp::WebPDecoder::new(cursor)?)
+            .context("Failed to decode WebP as static image")?;
         let processed = apply_processing(img, settings);
         let frame_path = frames_dir.join(format!("frame_{:03}.{}", 1, ext));
         encode_frame(&processed, &frame_path, ext)?;
@@ -521,8 +522,7 @@ fn extract_apng_frames(
     settings: &ImageSettings,
 ) -> Result<u64> {
     let cursor = std::io::Cursor::new(data);
-    let decoder =
-        image::codecs::png::PngDecoder::new(cursor).context("Failed to decode PNG")?;
+    let decoder = image::codecs::png::PngDecoder::new(cursor).context("Failed to decode PNG")?;
 
     let frames = match decoder.apng() {
         Ok(apng_decoder) => apng_decoder
@@ -534,9 +534,8 @@ fn extract_apng_frames(
 
     if frames.is_empty() {
         let cursor = std::io::Cursor::new(data);
-        let img =
-            image::DynamicImage::from_decoder(image::codecs::png::PngDecoder::new(cursor)?)
-                .context("Failed to decode PNG as static image")?;
+        let img = image::DynamicImage::from_decoder(image::codecs::png::PngDecoder::new(cursor)?)
+            .context("Failed to decode PNG as static image")?;
         let processed = apply_processing(img, settings);
         let frame_path = frames_dir.join(format!("frame_{:03}.{}", 1, ext));
         encode_frame(&processed, &frame_path, ext)?;
@@ -630,16 +629,15 @@ fn convert_animated(
         target_format
     };
 
-    let stem = file
-        .path
-        .file_stem()
-        .unwrap_or_default()
-        .to_string_lossy();
+    let stem = file.path.file_stem().unwrap_or_default().to_string_lossy();
 
     match resolved_format {
         OutputFormat::Png => {
-            let temp_dir =
-                std::env::temp_dir().join(format!("tui_img_frames_{}_{}", std::process::id(), rand_suffix()));
+            let temp_dir = std::env::temp_dir().join(format!(
+                "tui_img_frames_{}_{}",
+                std::process::id(),
+                rand_suffix()
+            ));
             let _ = fs::create_dir_all(&temp_dir);
             let result = (|| -> Result<(u64, String)> {
                 extract_frames_to_path(file, &temp_dir, Some(OutputFormat::Png))?;
@@ -653,8 +651,11 @@ fn convert_animated(
             result
         }
         OutputFormat::Gif => {
-            let temp_dir =
-                std::env::temp_dir().join(format!("tui_img_frames_{}_{}", std::process::id(), rand_suffix()));
+            let temp_dir = std::env::temp_dir().join(format!(
+                "tui_img_frames_{}_{}",
+                std::process::id(),
+                rand_suffix()
+            ));
             let _ = fs::create_dir_all(&temp_dir);
             let result = (|| -> Result<(u64, String)> {
                 extract_frames_to_path(file, &temp_dir, Some(OutputFormat::Png))?;
@@ -668,8 +669,11 @@ fn convert_animated(
             result
         }
         OutputFormat::Webp => {
-            let temp_dir =
-                std::env::temp_dir().join(format!("tui_img_frames_{}_{}", std::process::id(), rand_suffix()));
+            let temp_dir = std::env::temp_dir().join(format!(
+                "tui_img_frames_{}_{}",
+                std::process::id(),
+                rand_suffix()
+            ));
             let _ = fs::create_dir_all(&temp_dir);
             let result = (|| -> Result<(u64, String)> {
                 extract_frames_to_path(file, &temp_dir, Some(OutputFormat::Png))?;
@@ -794,8 +798,8 @@ fn assemble_webp(
     let width = first_img.width();
     let height = first_img.height();
 
-    let mut config = webp::WebPConfig::new()
-        .map_err(|_| anyhow::anyhow!("Failed to init WebP config"))?;
+    let mut config =
+        webp::WebPConfig::new().map_err(|_| anyhow::anyhow!("Failed to init WebP config"))?;
     config.method = 4;
     config.pass = 10;
 
@@ -844,7 +848,7 @@ fn assemble_apng(
     output_path: &Path,
     delays: &[u32],
 ) -> Result<(u64, String)> {
-    use png::{BlendOp, BitDepth, ColorType, DisposeOp};
+    use png::{BitDepth, BlendOp, ColorType, DisposeOp};
 
     if frame_paths.is_empty() {
         anyhow::bail!("No frames to assemble");

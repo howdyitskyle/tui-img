@@ -362,7 +362,9 @@ mod integration {
                 200,
                 None,
             ));
-            let webp_data = encoder.try_encode().map_err(|e| format!("Animated WebP encode failed: {:?}", e))?;
+            let webp_data = encoder
+                .try_encode()
+                .map_err(|e| format!("Animated WebP encode failed: {:?}", e))?;
             let mut file = File::create(path)?;
             file.write_all(&webp_data)?;
             Ok(())
@@ -434,16 +436,26 @@ mod integration {
             create_animated_gif(&input_path).unwrap();
 
             let file = make_file(&input_path);
-            assert!(file.is_animated, "Animated GIF should be detected as animated");
+            assert!(
+                file.is_animated,
+                "Animated GIF should be detected as animated"
+            );
 
             let output_path = temp_dir.join("output.gif");
             let result = tui_img::compress_image(&file, &output_path, None);
-            assert!(result.is_ok(), "Animated GIF → GIF should succeed: {:?}", result.err());
+            assert!(
+                result.is_ok(),
+                "Animated GIF → GIF should succeed: {:?}",
+                result.err()
+            );
 
             let (_, output_name) = result.unwrap();
             let output_file = temp_dir.join(&output_name);
             assert!(output_file.exists(), "Output GIF should exist");
-            assert!(get_file_size(&output_file) > 0, "Output should have size > 0");
+            assert!(
+                get_file_size(&output_file) > 0,
+                "Output should have size > 0"
+            );
 
             let _ = fs::remove_dir_all(&temp_dir);
         }
@@ -458,16 +470,27 @@ mod integration {
             create_animated_webp(&input_path).unwrap();
 
             let file = make_file(&input_path);
-            assert!(file.is_animated, "Animated WebP should be detected as animated");
+            assert!(
+                file.is_animated,
+                "Animated WebP should be detected as animated"
+            );
 
             let output_path = temp_dir.join("output.gif");
-            let result = tui_img::compress_image(&file, &output_path, Some(tui_img::OutputFormat::Gif));
-            assert!(result.is_ok(), "Animated WebP → GIF should succeed: {:?}", result.err());
+            let result =
+                tui_img::compress_image(&file, &output_path, Some(tui_img::OutputFormat::Gif));
+            assert!(
+                result.is_ok(),
+                "Animated WebP → GIF should succeed: {:?}",
+                result.err()
+            );
 
             let (_, output_name) = result.unwrap();
             let output_file = temp_dir.join(&output_name);
             assert!(output_file.exists(), "Output GIF should exist");
-            assert!(get_file_size(&output_file) > 0, "Output should have size > 0");
+            assert!(
+                get_file_size(&output_file) > 0,
+                "Output should have size > 0"
+            );
 
             let _ = fs::remove_dir_all(&temp_dir);
         }
@@ -482,16 +505,27 @@ mod integration {
             create_animated_webp(&input_path).unwrap();
 
             let file = make_file(&input_path);
-            assert!(file.is_animated, "Animated WebP should be detected as animated");
+            assert!(
+                file.is_animated,
+                "Animated WebP should be detected as animated"
+            );
 
             let output_path = temp_dir.join("output.png");
-            let result = tui_img::compress_image(&file, &output_path, Some(tui_img::OutputFormat::Png));
-            assert!(result.is_ok(), "Animated WebP → APNG should succeed: {:?}", result.err());
+            let result =
+                tui_img::compress_image(&file, &output_path, Some(tui_img::OutputFormat::Png));
+            assert!(
+                result.is_ok(),
+                "Animated WebP → APNG should succeed: {:?}",
+                result.err()
+            );
 
             let (_, output_name) = result.unwrap();
             let output_file = temp_dir.join(&output_name);
             assert!(output_file.exists(), "Output APNG should exist");
-            assert!(get_file_size(&output_file) > 0, "Output should have size > 0");
+            assert!(
+                get_file_size(&output_file) > 0,
+                "Output should have size > 0"
+            );
 
             let _ = fs::remove_dir_all(&temp_dir);
         }
@@ -506,16 +540,27 @@ mod integration {
             create_animated_apng(&input_path).unwrap();
 
             let file = make_file(&input_path);
-            assert!(file.is_animated, "Animated PNG should be detected as animated");
+            assert!(
+                file.is_animated,
+                "Animated PNG should be detected as animated"
+            );
 
             let output_path = temp_dir.join("output.gif");
-            let result = tui_img::compress_image(&file, &output_path, Some(tui_img::OutputFormat::Gif));
-            assert!(result.is_ok(), "Animated APNG → GIF should succeed: {:?}", result.err());
+            let result =
+                tui_img::compress_image(&file, &output_path, Some(tui_img::OutputFormat::Gif));
+            assert!(
+                result.is_ok(),
+                "Animated APNG → GIF should succeed: {:?}",
+                result.err()
+            );
 
             let (_, output_name) = result.unwrap();
             let output_file = temp_dir.join(&output_name);
             assert!(output_file.exists(), "Output GIF should exist");
-            assert!(get_file_size(&output_file) > 0, "Output should have size > 0");
+            assert!(
+                get_file_size(&output_file) > 0,
+                "Output should have size > 0"
+            );
 
             let _ = fs::remove_dir_all(&temp_dir);
         }
@@ -530,16 +575,27 @@ mod integration {
             create_animated_gif(&input_path).unwrap();
 
             let file = make_file(&input_path);
-            assert!(file.is_animated, "Animated GIF should be detected as animated");
+            assert!(
+                file.is_animated,
+                "Animated GIF should be detected as animated"
+            );
 
             let output_path = temp_dir.join("output.png");
-            let result = tui_img::compress_image(&file, &output_path, Some(tui_img::OutputFormat::Png));
-            assert!(result.is_ok(), "Animated GIF → PNG should succeed: {:?}", result.err());
+            let result =
+                tui_img::compress_image(&file, &output_path, Some(tui_img::OutputFormat::Png));
+            assert!(
+                result.is_ok(),
+                "Animated GIF → PNG should succeed: {:?}",
+                result.err()
+            );
 
             let (_, output_name) = result.unwrap();
             let output_file = temp_dir.join(&output_name);
             assert!(output_file.exists(), "Output PNG should exist");
-            assert!(get_file_size(&output_file) > 0, "Output should have size > 0");
+            assert!(
+                get_file_size(&output_file) > 0,
+                "Output should have size > 0"
+            );
 
             let _ = fs::remove_dir_all(&temp_dir);
         }
@@ -554,16 +610,26 @@ mod integration {
             create_animated_webp(&input_path).unwrap();
 
             let file = make_file(&input_path);
-            assert!(file.is_animated, "Animated WebP should be detected as animated");
+            assert!(
+                file.is_animated,
+                "Animated WebP should be detected as animated"
+            );
 
             let output_path = temp_dir.join("output.webp");
             let result = tui_img::compress_image(&file, &output_path, None);
-            assert!(result.is_ok(), "Animated WebP → Same (WebP) should succeed: {:?}", result.err());
+            assert!(
+                result.is_ok(),
+                "Animated WebP → Same (WebP) should succeed: {:?}",
+                result.err()
+            );
 
             let (_, output_name) = result.unwrap();
             let output_file = temp_dir.join(&output_name);
             assert!(output_file.exists(), "Output WebP should exist");
-            assert!(get_file_size(&output_file) > 0, "Output should have size > 0");
+            assert!(
+                get_file_size(&output_file) > 0,
+                "Output should have size > 0"
+            );
 
             let _ = fs::remove_dir_all(&temp_dir);
         }
@@ -578,16 +644,27 @@ mod integration {
             create_animated_gif(&input_path).unwrap();
 
             let file = make_file(&input_path);
-            assert!(file.is_animated, "Animated GIF should be detected as animated");
+            assert!(
+                file.is_animated,
+                "Animated GIF should be detected as animated"
+            );
 
             let output_path = temp_dir.join("output.jpg");
-            let result = tui_img::compress_image(&file, &output_path, Some(tui_img::OutputFormat::Jpeg));
-            assert!(result.is_ok(), "Animated GIF → JPEG should succeed: {:?}", result.err());
+            let result =
+                tui_img::compress_image(&file, &output_path, Some(tui_img::OutputFormat::Jpeg));
+            assert!(
+                result.is_ok(),
+                "Animated GIF → JPEG should succeed: {:?}",
+                result.err()
+            );
 
             let (_, output_name) = result.unwrap();
             let output_file = temp_dir.join(&output_name);
             assert!(output_file.exists(), "Output JPEG should exist");
-            assert!(get_file_size(&output_file) > 0, "Output should have size > 0");
+            assert!(
+                get_file_size(&output_file) > 0,
+                "Output should have size > 0"
+            );
 
             let _ = fs::remove_dir_all(&temp_dir);
         }
@@ -607,7 +684,11 @@ mod integration {
 
             let output_path = temp_dir.join("output.gif");
             let result = tui_img::compress_image(&file, &output_path, None);
-            assert!(result.is_ok(), "Animated GIF with resize should succeed: {:?}", result.err());
+            assert!(
+                result.is_ok(),
+                "Animated GIF with resize should succeed: {:?}",
+                result.err()
+            );
 
             let _ = fs::remove_dir_all(&temp_dir);
         }
@@ -622,11 +703,18 @@ mod integration {
             create_single_frame_gif(&input_path).unwrap();
 
             let file = make_file(&input_path);
-            assert!(!file.is_animated, "Single-frame GIF should not be detected as animated");
+            assert!(
+                !file.is_animated,
+                "Single-frame GIF should not be detected as animated"
+            );
 
             let output_path = temp_dir.join("output.gif");
             let result = tui_img::compress_image(&file, &output_path, None);
-            assert!(result.is_ok(), "Single-frame GIF compression should succeed: {:?}", result.err());
+            assert!(
+                result.is_ok(),
+                "Single-frame GIF compression should succeed: {:?}",
+                result.err()
+            );
 
             let _ = fs::remove_dir_all(&temp_dir);
         }
@@ -641,11 +729,18 @@ mod integration {
             create_single_frame_webp(&input_path).unwrap();
 
             let file = make_file(&input_path);
-            assert!(!file.is_animated, "Single-frame WebP should not be detected as animated");
+            assert!(
+                !file.is_animated,
+                "Single-frame WebP should not be detected as animated"
+            );
 
             let output_path = temp_dir.join("output.webp");
             let result = tui_img::compress_image(&file, &output_path, None);
-            assert!(result.is_ok(), "Single-frame WebP compression should succeed: {:?}", result.err());
+            assert!(
+                result.is_ok(),
+                "Single-frame WebP compression should succeed: {:?}",
+                result.err()
+            );
 
             let _ = fs::remove_dir_all(&temp_dir);
         }
@@ -660,11 +755,18 @@ mod integration {
             create_single_frame_png(&input_path).unwrap();
 
             let file = make_file(&input_path);
-            assert!(!file.is_animated, "Single-frame PNG should not be detected as animated");
+            assert!(
+                !file.is_animated,
+                "Single-frame PNG should not be detected as animated"
+            );
 
             let output_path = temp_dir.join("output.png");
             let result = tui_img::compress_image(&file, &output_path, None);
-            assert!(result.is_ok(), "Single-frame PNG compression should succeed: {:?}", result.err());
+            assert!(
+                result.is_ok(),
+                "Single-frame PNG compression should succeed: {:?}",
+                result.err()
+            );
 
             let _ = fs::remove_dir_all(&temp_dir);
         }
