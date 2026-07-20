@@ -180,6 +180,7 @@ impl App {
             .unwrap_or(false)
     }
 
+    #[cfg(feature = "animation")]
     fn is_frames_directory(path: &Path) -> bool {
         let name = match path.file_name().and_then(|s| s.to_str()) {
             Some(n) => n,
@@ -549,8 +550,17 @@ impl App {
                     is_frames_dir,
                 };
 
+                #[cfg(feature = "animation")]
+                fn do_assemble(file: &ImageFile, output: &Path, fmt: Option<OutputFormat>) -> Result<(u64, String)> {
+                    compression::assemble_frames(file, output, fmt)
+                }
+                #[cfg(not(feature = "animation"))]
+                fn do_assemble(_file: &ImageFile, _output: &Path, _fmt: Option<OutputFormat>) -> Result<(u64, String)> {
+                    anyhow::bail!("Animation support not enabled")
+                }
+
                 if is_frames_dir {
-                    match compression::assemble_frames(&temp_file, &output_path, global_format) {
+                    match do_assemble(&temp_file, &output_path, global_format) {
                         Ok((new_size, output_filename)) => {
                             total_saved =
                                 total_saved.saturating_add(original_size.saturating_sub(new_size));
