@@ -821,8 +821,10 @@ mod integration {
             let delays_path = frames_dir.join("delays.txt");
             assert!(delays_path.exists(), "delays.txt should exist");
             let delays = std::fs::read_to_string(delays_path).unwrap();
-            let delay_values: Vec<u32> =
-                delays.lines().filter_map(|l| l.trim().parse().ok()).collect();
+            let delay_values: Vec<u32> = delays
+                .lines()
+                .filter_map(|l| l.trim().parse().ok())
+                .collect();
             assert_eq!(delay_values.len(), 3, "Should have 3 delays");
 
             let _ = fs::remove_dir_all(&temp_dir);

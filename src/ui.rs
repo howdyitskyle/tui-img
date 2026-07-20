@@ -352,7 +352,13 @@ pub fn render_settings_panel(f: &mut Frame, area: Rect, app: &crate::App) {
         .map(|f| if f.settings.backup { "Yes" } else { "No" })
         .unwrap_or("No");
     let extract_frames = file
-        .map(|f| if f.settings.extract_frames { "On" } else { "Off" })
+        .map(|f| {
+            if f.settings.extract_frames {
+                "On"
+            } else {
+                "Off"
+            }
+        })
         .unwrap_or("Off");
 
     fn opt_no_hint(
